@@ -1,0 +1,20 @@
+DATA_PRESET:
+  N_INTENTS: 2
+  N_RESAMPLED_OBJ_POINTS: 2048
+
+DATASET:
+  TRAIN:
+    DATA_SPLIT: train
+    OBJ_CATES: ["trigger_sprayer"]
+    INTENT_MODE: ["use", "hold"]
+
+
+  VAL:
+    DATA_SPLIT: val
+    OBJ_CATES: ["trigger_sprayer"]
+    INTENT_MODE: ["use", "hold"]
+
+  TEST:
+    DATA_SPLIT: test
+    OBJ_CATES: ["trigger_sprayer"]
+    INTENT_MODE: ["use", "hold"]

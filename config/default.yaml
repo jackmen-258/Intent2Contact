@@ -1,0 +1,23 @@
+# dataloader
+batch_size: 64
+num_workers: 8
+
+# train
+base_lr: 0.0008
+kl_coef: 0.05
+reg_coef: 0.0005
+log_every_epoch: 50
+snapshot_every_epoch: 10
+n_epochs: 50
+robustkl: True
+
+# network
+latentD: 16
+n_neurons: 256
+obj_feature: 6
+pointnet_hc: 64
+intent_dim: 64
+
+# other
+cuda_id: 1
+seed: 42
