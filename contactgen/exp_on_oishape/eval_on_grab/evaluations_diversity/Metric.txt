@@ -1,0 +1,10 @@
+Total samples: 285
+Valid samples: 285
+Skipped samples: 0
+
+cls_num (global): 20
+feature: hand_joints_r
+canonical: True
+unit: cm
+Diversity Entropy (ln): 2.8586
+Diversity Avg Dist: 6.8885
