@@ -1,9 +1,0 @@
-Total samples: 285
-Valid samples: 285
-Skipped samples: 0
-
-Penetration Distance (mean, cm): 0.060647
-Intersection Volume (mean, cm^3): 0.297676
-Simulation Displacement (mean, cm): 10.364558
-Simulation Displacement (std, cm): 2.581975
-Contact Ratio: 0.2351
