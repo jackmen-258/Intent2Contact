@@ -15,8 +15,8 @@ from lib.metrics.simulator import simulation_sample
 from lib.metrics.diversity import diversity
 from lib.metrics.diversity import transform_to_canonical, convert_joints
 
-from lib.networks.classifier import IntentClassifier_V2
 from lib.contact.hand_object import HandObject
+from lib.metrics.affordance_accuracy import compute_affordance_metrics_batch
 
 def _get_unit_scales(linear_unit: str):
     """
@@ -136,21 +136,6 @@ class DumpedGraspsLoader(object):
         grasp_item["hand_faces"] = self.hand_wt_faces
         return grasp_item
 
-def _parse_intent_names(s: str):
-    names = [x.strip() for x in (s or "").split(",") if x.strip()]
-    if not names:
-        raise ValueError("Empty --intent_names")
-    return names
-
-def _load_intent_ckpt_to_model(model: torch.nn.Module, ckpt_path: str):
-    ckpt = torch.load(ckpt_path, map_location="cpu")
-    if isinstance(ckpt, dict):
-        state = ckpt.get("model", ckpt.get("state_dict", ckpt))
-    else:
-        state = ckpt
-    missing, unexpected = model.load_state_dict(state, strict=False)
-    return missing, unexpected
-
 def _sample_obj_points_with_normals(obj_wt: Trimesh, n_points: int):
     """
     从 watertight mesh 表面采样点，使用对应三角面法向作为点法向。
@@ -191,82 +176,6 @@ def _contact_map_via_hand_object(
     if contact_map.ndim == 2:
         contact_map = contact_map.unsqueeze(-1)
     return obj_pts, obj_n, contact_map
-
-
-def compute_intent_metrics_quality(arg, dumped_grasps_loader):
-    """
-    计算意图分类指标：
-      - IntentScore: mean p(I_cond)
-      - Cons@1: mean 1[argmax==I_cond]
-    ✅ 修改：移除 per-intent 统计
-    """
-    device = torch.device(arg.intent_device if (torch.cuda.is_available() and "cuda" in arg.intent_device) else "cpu")
-
-    intent_names = _parse_intent_names(arg.intent_names)
-    name_to_id = {n: i for i, n in enumerate(intent_names)}
-
-    # 冻结分类器
-    clf = IntentClassifier_V2(num_intents=4).to(device)
-    missing, unexpected = _load_intent_ckpt_to_model(clf, arg.intent_ckpt)
-    clf.eval()
-
-    # HandObject（用于 contact）
-    hand_object = HandObject(device=device)
-
-    # ✅ 只保留整体统计
-    all_scores = []
-    all_conss = []
-    
-    # ✅ 统计跳过的样本数
-    skipped_count = 0
-    total_evaluated = 0
-
-    for i in range(len(dumped_grasps_loader)):
-        item = dumped_grasps_loader[i]
-        
-        # ✅ 如果样本被跳过（返回 None）
-        if item is None:
-            skipped_count += 1
-            continue
-        
-        intent_name = item.get("intent_name", "unknown")
-        if intent_name not in name_to_id:
-            continue
-        cond_id = name_to_id[intent_name]
-
-        obj_wt: Trimesh = item["obj_wt"]
-        hand_verts_np = np.asarray(item["hand_verts_r"], dtype=np.float32)
-
-        obj_pts, obj_n, contact_map = _contact_map_via_hand_object(
-            hand_object=hand_object,
-            hand_verts_np=hand_verts_np,
-            obj_wt=obj_wt,
-            n_points=int(arg.intent_n_obj_points),
-            device=device,
-        )  # (1,N,3),(1,N,3),(1,N,1)
-
-        with torch.no_grad():
-            logits = clf(obj_pts, obj_n, contact_map)  # (1,C)
-            probs = F.softmax(logits, dim=1)[0]        # (C,)
-
-        score = float(probs[cond_id].item())
-        pred = int(torch.argmax(probs).item())
-        cons = 1.0 if pred == cond_id else 0.0
-
-        all_scores.append(score)
-        all_conss.append(cons)
-        total_evaluated += 1
-    
-    if skipped_count > 0:
-        print(f"⚠️  [Intent Eval] Skipped {skipped_count} samples due to missing files")
-    
-    print(f"✅  [Intent Eval] Evaluated {total_evaluated} samples")
-
-    overall_score = float(np.mean(all_scores)) if all_scores else 0.0
-    overall_cons = float(np.mean(all_conss)) if all_conss else 0.0
-
-    # ✅ 只返回整体指标
-    return overall_score, overall_cons
 
 def evaluate_single_grasp(idx, grasp_loader, sims_dir):
     """
@@ -387,10 +296,17 @@ def evaluate_quality_mode(arg):
     sims_disp_out = sims_disp.avg * linear_scale
     sims_disp_std_out = float(np.std(sims_disp_list)) * linear_scale if sims_disp_list else 0.0
 
-    intent_score_mean = None
-    intent_cons_mean = None
-    if arg.intent_enable:
-        intent_score_mean, intent_cons_mean = compute_intent_metrics_quality(arg, dumped_grasps_loader)
+    # ---- Affordance Accuracy (model-free intent evaluation) ----
+    aff_results = None
+    if arg.aff_enable:
+        print("\n[Affordance] Computing affordance accuracy metrics...")
+        aff_results = compute_affordance_metrics_batch(
+            dumped_grasps_loader=dumped_grasps_loader,
+            oakbase_dir=arg.aff_oakbase_dir,
+            meta_dir=arg.aff_meta_dir,
+            n_obj_points=int(arg.intent_n_obj_points),
+            prior_path=getattr(arg, "aff_prior", None),
+        )
 
     with open(os.path.join(evaluation_dir, "Metric.txt"), "w") as f:
         f.write(f"Total samples: {len(eval_res)}\n")
@@ -401,9 +317,17 @@ def evaluate_quality_mode(arg):
         f.write(f"Simulation Displacement (mean, {linear_unit}): {sims_disp_out:.6f}\n")
         f.write(f"Simulation Displacement (std, {linear_unit}): {sims_disp_std_out:.6f}\n")
         f.write(f"Contact Ratio: {contact_ratio:.4f}\n")
-        if arg.intent_enable:
-            f.write(f"Intent Score (overall): {intent_score_mean:.6f}\n")
-            f.write(f"Intent Cons@1 (overall): {intent_cons_mean:.4f}\n")
+        if aff_results is not None:
+            f.write(f"\n--- Affordance Accuracy (model-free) ---\n")
+            f.write(f"Prior source: {aff_results['prior_source']}\n")
+            f.write(f"Evaluated: {aff_results['n_evaluated']}\n")
+            f.write(f"Skipped (missing files): {aff_results['n_skipped']}\n")
+            f.write(f"Skipped (no parts): {aff_results['n_no_parts']}\n")
+            f.write(f"Contact-Valid Rate: {aff_results['contact_valid_rate']:.4f}\n")
+            f.write(f"Aff-Acc (all): {aff_results['aff_acc']:.4f}\n")
+            f.write(f"Aff-Ratio (all): {aff_results['aff_ratio']:.4f}\n")
+            f.write(f"Aff-Acc (valid only): {aff_results['aff_acc_valid_only']:.4f}\n")
+            f.write(f"Aff-Ratio (valid only): {aff_results['aff_ratio_valid_only']:.4f}\n")
 
     print(f"\n[Quality Mode] Evaluation done! Results saved in: {evaluation_dir}")
     print(f"  Total samples: {len(eval_res)} ")
@@ -413,9 +337,15 @@ def evaluate_quality_mode(arg):
     print(f"  Pentr Vol ({linear_unit}^3): {pentr_vol_out:.6f}")
     print(f"  Sims Disp ({linear_unit}): {sims_disp_out:.6f} ± {sims_disp_std_out:.6f}")
     print(f"  Contact Ratio: {contact_ratio:.4f}")
-    if arg.intent_enable:
-        print(f"  Intent Score (overall): {intent_score_mean:.6f}")
-        print(f"  Intent Cons@1 (overall): {intent_cons_mean:.4f}")
+    if aff_results is not None:
+        print(f"\n  --- Affordance Accuracy (model-free) ---")
+        print(f"  Evaluated: {aff_results['n_evaluated']}")
+        print(f"  No parts: {aff_results['n_no_parts']}")
+        print(f"  Contact-Valid Rate: {aff_results['contact_valid_rate']:.4f}")
+        print(f"  Aff-Acc (all): {aff_results['aff_acc']:.4f}")
+        print(f"  Aff-Ratio (all): {aff_results['aff_ratio']:.4f}")
+        print(f"  Aff-Acc (valid only): {aff_results['aff_acc_valid_only']:.4f}")
+        print(f"  Aff-Ratio (valid only): {aff_results['aff_ratio_valid_only']:.4f}")
 
 
 def evaluate_diversity_mode(arg):
@@ -510,7 +440,7 @@ def evaluate_diversity_mode(arg):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Evaluate generated grasps')
-    parser.add_argument("-g", "--gpu_id", type=str, default="0")
+    parser.add_argument("-g", "--gpu_id", type=str, default="1")
     parser.add_argument("--n_jobs", type=int, default=8, help="parallel jobs")
     parser.add_argument("--exp_path", type=str, required=True, help="experiment output dir")
     parser.add_argument("--proc_dir", type=str, default="data/GRAB_object_process")
@@ -527,19 +457,22 @@ if __name__ == '__main__':
     
     parser.add_argument("--linear_unit", type=str, choices=["m", "cm"], default="cm")
     
-    parser.add_argument("--intent_enable", action="store_true")
-    parser.add_argument("--intent_ckpt", type=str, default="runs-classifier/checkpoints/E097_classifier.pt")
-    parser.add_argument("--intent_device", type=str, default="cuda:0")
-    parser.add_argument("--intent_names", type=str, default="use,hold,liftup,handover")
     parser.add_argument("--intent_n_obj_points", type=int, default=2048)
+
+    parser.add_argument("--aff_enable", action="store_true",
+                        help="Enable affordance accuracy evaluation (model-free)")
+    parser.add_argument("--aff_oakbase_dir", type=str, default="/home/kingston/wzc/data/OakInk/OakBase",
+                        help="Path to OakBase part segmentation root")
+    parser.add_argument("--aff_meta_dir", type=str, default="/home/kingston/wzc/data/OakInk/shape/metaV2",
+                        help="Path to OakInk metaV2 directory")
+    parser.add_argument("--aff_prior", type=str, default="assets/affordance_prior.json",
+                        help="Path to GT affordance prior JSON (from build_affordance_prior.py). "
+                             "If file exists, uses data-driven expected parts; otherwise falls back to rules.")
 
     arg = parser.parse_args()
 
     os.environ["OMP_NUM_THREADS"] = "1"
     os.environ["CUDA_VISIBLE_DEVICES"] = str(arg.gpu_id)
-
-    if arg.intent_enable and not arg.intent_ckpt:
-        raise ValueError("--intent_enable requires --intent_ckpt")
 
     if arg.mode == 'quality':
         evaluate_quality_mode(arg)

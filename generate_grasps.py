@@ -179,7 +179,7 @@ if __name__ == "__main__":
                        help='GRAB dataset config (only used when --dataset=grab)')
     parser.add_argument('--save_root', default='experiments/exp_001', type=str, 
                        help='Experiment root directory')
-    parser.add_argument('--device', type=int, default=0)
+    parser.add_argument('--device', type=int, default=1)
     parser.add_argument('--checkpoint_dir', type=str, required=True,
                        help='Directory containing checkpoints')
     

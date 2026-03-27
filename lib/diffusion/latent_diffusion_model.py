@@ -5,7 +5,6 @@ from pytorch3d.transforms import axis_angle_to_matrix
 
 from pytorch3d.loss import chamfer_distance
 from manotorch.manolayer import ManoLayer, MANOOutput
-from pytorch3d.structures import Meshes
 
 from tqdm.auto import tqdm
 from einops import reduce
@@ -100,7 +99,7 @@ class ManoDecoder(nn.Module):
 
         pose  = self.pose_head(h)
         trans = self.trans_head(h)
-        shape = self.shape_head(h)
+        shape = torch.clamp(self.shape_head(h), -3.0, 3.0)
         out = torch.cat([pose, trans, shape], dim=-1)
 
         return out
@@ -125,14 +124,21 @@ class BiAttentionFusion(nn.Module):
     - Intent-to-Object: 意图关注物体的哪些区域
     - Object-to-Intent: 物体点如何被意图调制
     """
-    def __init__(self, obj_dim, intent_dim, hidden_dim=128, num_heads=4, dropout=0.1):
+    def __init__(self, obj_dim, intent_dim, hidden_dim=128, num_heads=4, dropout=0.1, n_intent_tokens=4):
         super().__init__()
-        
+
         self.hidden_dim = hidden_dim
-        
+        self.n_intent_tokens = n_intent_tokens
+
         # 投影层
         self.obj_proj = nn.Linear(obj_dim, hidden_dim)
         self.intent_proj = nn.Linear(intent_dim, hidden_dim)
+
+        # 将单个intent embedding展开为多个token，提供多语义维度
+        self.intent_expand = nn.Sequential(
+            nn.Linear(hidden_dim, hidden_dim * n_intent_tokens),
+            nn.GELU(),
+        )
         
         # ===== 方向1: Intent-to-Object Attention =====
         # Query: Intent, Key/Value: Object
@@ -183,27 +189,30 @@ class BiAttentionFusion(nn.Module):
         intent_h_expanded = intent_h.unsqueeze(1)     # [B, 1, hidden_dim]
         
         # ===== 方向1: Intent-to-Object =====
-        # 意图作为 Query，关注物体的哪些区域
-        # 输出：意图"看到"的物体表示
-        i2o_out, i2o_attn_weights = self.intent_to_obj_attn(
+        # Query: Intent, Key/Value: Object
+        # 语义：意图关注物体的哪些功能区域
+        i2o_out, _ = self.intent_to_obj_attn(
             query=intent_h_expanded,   # [B, 1, hidden_dim]
             key=obj_h,                 # [B, N, hidden_dim]
             value=obj_h                # [B, N, hidden_dim]
-        )  # i2o_out: [B, 1, hidden_dim], i2o_attn_weights: [B, 1, N]
-        
+        )  # [B, 1, hidden_dim]
+
         i2o_out = self.intent_to_obj_norm(i2o_out.squeeze(1) + intent_h)  # [B, hidden_dim] + residual
-        
+
         # ===== 方向2: Object-to-Intent =====
-        # 物体点作为 Query，被意图调制
-        # 输出：每个物体点经过意图调制后的表示
-        o2i_out, o2i_attn_weights = self.obj_to_intent_attn(
+        # Query: Object, Key/Value: Intent (expanded to multiple tokens)
+        # 语义：每个物体点从意图的多个语义维度中选择性聚合信息
+        intent_tokens = self.intent_expand(intent_h)  # [B, hidden_dim * K]
+        intent_tokens = intent_tokens.view(B, self.n_intent_tokens, self.hidden_dim)  # [B, K, hidden_dim]
+
+        o2i_out, _ = self.obj_to_intent_attn(
             query=obj_h,               # [B, N, hidden_dim]
-            key=intent_h_expanded,     # [B, 1, hidden_dim]
-            value=intent_h_expanded    # [B, 1, hidden_dim]
-        )  # o2i_out: [B, N, hidden_dim], o2i_attn_weights: [B, N, 1]
-        
+            key=intent_tokens,         # [B, K, hidden_dim]
+            value=intent_tokens        # [B, K, hidden_dim]
+        )  # [B, N, hidden_dim]
+
         o2i_out = self.obj_to_intent_norm(o2i_out + obj_h)  # [B, N, hidden_dim] + residual
-        o2i_pooled = o2i_out.mean(dim=1)  # [B, hidden_dim] 池化
+        o2i_pooled = o2i_out.mean(dim=1)  # [B, hidden_dim]
         
         # ===== 融合两个方向 =====
         fused = torch.cat([i2o_out, o2i_pooled], dim=-1)  # [B, hidden_dim * 2]
@@ -385,33 +394,23 @@ class LatentHandDiffusion(nn.Module):
         cond = self.fusion(obj_feats, intent_embed)
         return cond
 
-    def compute_latent_stats(self, dataloader, max_samples=20000):
-        print("[INFO] Computing latent variable statistics...")
-        
+    def compute_latent_stats(self, dataloader):
+        print("[INFO] Computing latent variable statistics (full dataset)...")
+
         self.eval()
         all_latents = []
-        sample_count = 0
-        
+
         with torch.no_grad():
             for batch in tqdm(dataloader, desc="Computing latent stats"):
-                if sample_count >= max_samples:
-                    break
-                    
                 hand_pose = batch["hand_pose"].to(next(self.parameters()).device)
-                hand_trans = batch["hand_tsl"].to(next(self.parameters()).device) 
+                hand_trans = batch["hand_tsl"].to(next(self.parameters()).device)
                 hand_shape = batch["hand_shape"].to(next(self.parameters()).device)
                 mano_params = torch.cat([hand_pose, hand_trans, hand_shape], dim=-1)
-                
+
                 mu, logvar = self.encode_latent(mano_params)
-                z = self.reparameterize(mu, logvar)
-                all_latents.append(z)
-                
-                sample_count += z.shape[0]
-                
-                if sample_count >= max_samples:
-                    break
-        
-        all_latents = torch.cat(all_latents, dim=0)[:max_samples]
+                all_latents.append(mu)
+
+        all_latents = torch.cat(all_latents, dim=0)
 
         self.latent_mean.copy_(all_latents.mean(dim=0))
         self.latent_std.copy_(all_latents.std(dim=0) + 1e-8)
@@ -566,6 +565,8 @@ class LatentHandDiffusion(nn.Module):
             z = self.p_sample(z, t, cond)
             
         z = self.denormalize_latent(z)
+        # clip latent to training distribution range to avoid OOD decoding
+        z = torch.clamp(z, self.latent_mean - 3 * self.latent_std, self.latent_mean + 3 * self.latent_std)
         mano_params = self.decode_latent(z)
 
         return mano_params
@@ -580,8 +581,9 @@ class LatentHandDiffusion(nn.Module):
         return model_mean + nonzero_mask * (0.5 * model_log_variance).exp() * noise
     
     def p_losses(self, mano_params, obj_verts, obj_vn, intent_id, t, noise=None):
-        mu, logvar = self.encode_latent(mano_params)
-        z_start = self.reparameterize(mu, logvar)
+        with torch.no_grad():
+            mu, logvar = self.encode_latent(mano_params)
+        z_start = mu  # use deterministic encoding (mode of posterior) for diffusion target
 
         # normalize latent for diffusion training
         z_start = self.normalize_latent(z_start)
@@ -595,24 +597,17 @@ class LatentHandDiffusion(nn.Module):
 
         if self.objective == 'pred_noise':
             target = noise
-            pred_z = self.predict_start_from_noise(z_noisy, t, model_output)
         elif self.objective == 'pred_x0':
             target = z_start
-            pred_z = model_output
         elif self.objective == 'pred_v':
-            v = self.predict_v(z_start, t, noise)
-            target = v
-            pred_z = self.predict_start_from_v(z_noisy, t, model_output)
+            target = self.predict_v(z_start, t, noise)
 
         diff_loss = self.loss_fn(model_output, target, reduction='none')
         diff_loss = reduce(diff_loss, 'b ... -> b', 'mean')
         diff_loss = diff_loss * extract(self.snr_weights, t, diff_loss.shape)
         diff_loss = diff_loss.mean()
 
-        # decode after denormalizing latent
-        pred_z = self.denormalize_latent(pred_z)
-        pred_params = self.decode_latent(pred_z)
-        return diff_loss, pred_params
+        return diff_loss
 
     @property
     def loss_fn(self):
@@ -630,9 +625,9 @@ class LatentHandDiffusion(nn.Module):
         if t is None:
             t = self.sample_timesteps_logsnr(b, device)
 
-        loss, params = self.p_losses(mano_params, obj_verts, obj_vn, intent_id, t)
+        loss = self.p_losses(mano_params, obj_verts, obj_vn, intent_id, t)
 
-        return loss, params
+        return loss
     
     @torch.no_grad()
     def sample(self, obj_verts, obj_vn, intent_id):

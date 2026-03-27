@@ -23,7 +23,6 @@ from lib.utils.utils import cycle
 from einops import reduce
 from lib.utils.cfg_parser import Config
 from manotorch.manolayer import ManoLayer, MANOOutput
-from lib.networks.classifier import IntentClassifier_V2
 from lib.datasets.utils import CENTER_IDX
 
 from torch.utils.data import WeightedRandomSampler
@@ -62,7 +61,7 @@ class LatentHandDiffusionTrainer(object):
     def __init__(self, opt, diffusion_model, stage='vae', train_batch_size=64, 
                  train_num_steps=5000, save_and_val_every=500,
                  results_folder='runs-latent/weights', use_wandb=False, 
-                 w_kl=0.1, w_chamfer=10.0, w_intent=0.1):
+                 w_kl=0.1, w_chamfer=10.0):
         super().__init__()
         self.opt = opt
         
@@ -83,7 +82,6 @@ class LatentHandDiffusionTrainer(object):
 
         self.w_kl = w_kl
         self.w_chamfer = w_chamfer
-        self.w_intent = w_intent
 
         self.cfg = get_config(config_file=opt.oishape_cfg)
         self.prep_dataloader(self.cfg)
@@ -96,10 +94,6 @@ class LatentHandDiffusionTrainer(object):
             center_idx=CENTER_IDX,
             mano_assets_root="assets/mano_v1_2"
         ).to(self.device)
-        
-        if self.stage == 'diffusion':
-            self.intent_classifier = IntentClassifier_V2(num_intents=4).to(self.device)
-            self.load_intent_classifier(opt.intent_classifier_checkpoint)
 
         self.use_ema = getattr(opt, 'use_ema', False)
         self.ema_start = getattr(opt, 'ema_start', 0)
@@ -291,52 +285,6 @@ class LatentHandDiffusionTrainer(object):
         
         self.model.compute_latent_stats(train_loader)
 
-    def compute_intent_loss(self, pred_mano_params, gt_mano_params, obj_verts, obj_vn, intent_id=None, temp=1.0, ce_weight=0.7):
-        """
-        Teacher-student distillation intent loss + CE loss.
-        """
-        pred_contact = self.params_to_contact(pred_mano_params, obj_verts, obj_vn)
-        with torch.no_grad():
-            gt_contact = self.params_to_contact(gt_mano_params, obj_verts, obj_vn)
-
-        with torch.no_grad():
-            teacher_logits = self.intent_classifier(obj_verts, obj_vn, gt_contact)
-            teacher_probs = torch.softmax(teacher_logits / temp, dim=1)
-
-        student_logits = self.intent_classifier(obj_verts, obj_vn, pred_contact)
-        student_logprob = torch.log_softmax(student_logits / temp, dim=1)
-
-        kl_loss = F.kl_div(student_logprob, teacher_probs, reduction='batchmean') * (temp * temp)
-
-        ce_loss = 0.0
-        acc = None
-        if intent_id is not None:
-            ce_loss = F.cross_entropy(student_logits, intent_id)
-            with torch.no_grad():
-                pred_intents = torch.argmax(student_logits, dim=1)
-                acc = (pred_intents == intent_id).float().mean().item()
-
-        total_loss = (1 - ce_weight) * kl_loss + ce_weight * ce_loss
-
-        return {
-            'intent_loss': total_loss,
-            'acc': acc if acc is not None else 0.0,
-            'distill_loss': kl_loss.item(),
-            'ce_loss': ce_loss.item() if isinstance(ce_loss, torch.Tensor) else 0.0
-        }
-    
-    def get_intent_weight(self):
-        warmup_ratio = 0.3
-        warmup_steps = int(self.train_num_steps * warmup_ratio)
-        
-        if self.step < warmup_steps:
-            progress = float(self.step) / warmup_steps
-            weight = 1e-6 + (self.w_intent - 1e-6) * progress
-        else:
-            weight = self.w_intent
-        
-        return weight
-
     def train_step_vae(self, grasp):
         hand_pose = grasp["hand_pose"].to(self.device)
         hand_trans = grasp["hand_tsl"].to(self.device)
@@ -376,48 +324,19 @@ class LatentHandDiffusionTrainer(object):
 
         mano_params = torch.cat([hand_pose, hand_trans, hand_shape], dim=-1)
         
-        diffusion_loss, pred_mano_params = self.model(
+        diffusion_loss = self.model(
             mano_params, 
             obj_verts, 
             obj_vn, 
             intent_id
         )
 
-        if self.w_intent <= 0:
-            total_loss = diffusion_loss
-            loss_dict = {
-                'total_loss': total_loss,
-                'diffusion_loss': diffusion_loss
-            }
-            return total_loss, loss_dict
-
-        intent_dict = self.compute_intent_loss(
-            pred_mano_params,
-            mano_params,
-            obj_verts,
-            obj_vn,
-            intent_id,
-            temp=2.0,
-            ce_weight=self.opt.ce_weight
-        )
-
-        intent_loss = intent_dict['intent_loss']
-        weight_intent = self.get_intent_weight()
-
-        total_loss = (
-            diffusion_loss + 
-            weight_intent * intent_loss
-        )
-        
+        total_loss = diffusion_loss
         loss_dict = {
             'total_loss': total_loss,
-            'diffusion_loss': diffusion_loss,
-            'intent_loss': intent_loss,
-            'distill_loss': intent_dict['distill_loss'],
-            'ce_loss': intent_dict['ce_loss'],
-            'intent_acc': intent_dict['acc']
+            'diffusion_loss': diffusion_loss
         }
-        
+
         return total_loss, loss_dict
 
     def train_step(self, grasp):
@@ -498,16 +417,6 @@ class LatentHandDiffusionTrainer(object):
                 self.ema = ModelEMA(self.model, decay=getattr(self.opt, 'ema_decay', 0.999), device=self.device)
             self.ema.load_state_dict(data['ema'], strict=False)
             print(f"[INFO] Loaded EMA from checkpoint {checkpoint_path}")
-
-    def load_intent_classifier(self, checkpoint_path):
-        checkpoint = torch.load(checkpoint_path, map_location=self.device)
-        self.intent_classifier.load_state_dict(checkpoint, strict=True)
-        self.intent_classifier.eval()
-        
-        for param in self.intent_classifier.parameters():
-            param.requires_grad = False
-            
-        print(f"[INFO] Loaded and frozen intent classifier from {checkpoint_path}")
 
     def train(self):
         if self.stage == 'diffusion' and not self.model.latent_stats_computed and self.model.use_latent_norm:
@@ -594,8 +503,7 @@ def run_train(opt):
         results_folder=str(wdir),
         use_wandb=True,
         w_kl=opt.w_kl,
-        w_chamfer=opt.w_chamfer,
-        w_intent=opt.w_intent
+        w_chamfer=opt.w_chamfer
     )
     
     if opt.resume_step > 0:
@@ -621,12 +529,11 @@ def parse_opt():
 
     # Training options
     parser.add_argument('--batch_size', type=int, default=128, help='batch size')
-    parser.add_argument('--train_num_steps', type=int, default=20000, help='global training steps')
+    parser.add_argument('--train_num_steps', type=int, default=30000, help='global training steps')
 
     parser.add_argument('--oishape_cfg', default='config/all_cate.yaml', help='the path to oishape config')
-    parser.add_argument('--intent_classifier_checkpoint', type=str, default='runs-classifier/checkpoints/E097_classifier.pt', help='Intent classifier checkpoint path')
 
-    parser.add_argument('--save_and_val_every', type=int, default=10000, 
+    parser.add_argument('--save_and_val_every', type=int, default=5000, 
                        help='save checkpoint and validate every N steps')
 
     parser.add_argument('--latent_dim', type=int, default=64, help='latent dim for mano params')
@@ -637,7 +544,6 @@ def parse_opt():
     # Loss weight options
     parser.add_argument('--w_kl', type=float, default=0.01, help='Weight for KL loss')
     parser.add_argument('--w_chamfer', type=float, default=0.1, help='Weight for Chamfer distance loss')
-    parser.add_argument('--w_intent', type=float, default=0.1, help='Weight for intent consistency loss')
 
     # EMA options
     parser.add_argument('--use_ema', action='store_true', help='enable EMA for model weights')
@@ -655,7 +561,6 @@ def parse_opt():
     # for ablation study
     parser.add_argument('--fusion_type', type=str, default='bi_attn', help='type of fusion module')
     parser.add_argument('--disable_intent', action='store_true', help='disable intent conditioning')
-    parser.add_argument('--ce_weight', type=float, default=0.7, help='cross-entropy weight in intent loss')
 
     # Intent-balanced sampling options
     parser.add_argument('--intent_balanced', action='store_true',
