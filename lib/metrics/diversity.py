@@ -24,7 +24,7 @@ def diversity(cluster_array, cls_num=20):
 
     counts, _ = np.histogram(vecs, bins=len(codes))
 
-    # ✅ HALO：直接对 counts 求 entropy（内部会归一化），默认 ln
+    # HALO: directly compute entropy on counts (internally normalized), natural log.
     ent = float(scipy_entropy(counts))
     avg_dist = float(np.mean(dist)) if dist is not None and len(dist) > 0 else 0.0
     return ent, avg_dist

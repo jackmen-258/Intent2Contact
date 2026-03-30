@@ -11,20 +11,59 @@ from lib.utils.config import get_config
 from lib.datasets.oishape_dataset import OIShape
 from lib.diffusion.latent_diffusion_model import LatentHandDiffusion
 from manotorch.manolayer import ManoLayer, MANOOutput
-from lib.contact.hand_object import HandObject
 from lib.datasets.utils import CENTER_IDX
 
 from lib.datasets.grab_dataset import GRABTest
 
-def load_latest_checkpoint(checkpoint_dir):
+def _matches_prefix(key, prefixes):
+    return any(key == prefix or key.startswith(f"{prefix}.") for prefix in prefixes)
+
+
+def load_compatible_model_state(model, state_dict, only_prefixes=None, label="model"):
+    current_state = model.state_dict()
+    filtered_state = {}
+    skipped_keys = []
+    selected_keys = 0
+
+    for key, value in state_dict.items():
+        if only_prefixes is not None and not _matches_prefix(key, only_prefixes):
+            continue
+        selected_keys += 1
+        if key in current_state and current_state[key].shape == value.shape:
+            filtered_state[key] = value
+        else:
+            skipped_keys.append(key)
+
+    missing_keys, unexpected_keys = model.load_state_dict(filtered_state, strict=False)
+    if only_prefixes is not None:
+        missing_keys = [key for key in missing_keys if _matches_prefix(key, only_prefixes)]
+
+    if skipped_keys:
+        print(f"[INFO] Skipped {len(skipped_keys)} incompatible {label} keys during load.")
+    if unexpected_keys:
+        print(f"[INFO] Unexpected {label} keys ignored during load: {len(unexpected_keys)}")
+    if missing_keys:
+        print(f"[INFO] Missing {label} keys after compatible load: {len(missing_keys)}")
+    if only_prefixes is not None:
+        print(f"[INFO] Loaded {len(filtered_state)}/{selected_keys} selected {label} keys.")
+
+def load_checkpoint(checkpoint_dir, stage='diffusion', step=0):
     if not os.path.exists(checkpoint_dir):
         raise FileNotFoundError(f"Checkpoint directory {checkpoint_dir} not found")
 
-    prefix = f"model-diffusion-"
+    if step and step > 0:
+        checkpoint_path = os.path.join(checkpoint_dir, f"model-{stage}-{step}.pt")
+        if not os.path.exists(checkpoint_path):
+            raise FileNotFoundError(f"Checkpoint {checkpoint_path} not found")
+        return checkpoint_path
+
+    prefix = f"model-{stage}-"
     checkpoint_files = [
         f for f in os.listdir(checkpoint_dir)
         if f.startswith(prefix) and f.endswith(".pt")
     ]
+    if not checkpoint_files:
+        raise FileNotFoundError(f"No checkpoint found for stage '{stage}' in {checkpoint_dir}")
 
     def _extract_step(fname: str) -> int:
         stem = os.path.splitext(fname)[0]
@@ -37,7 +76,7 @@ def load_latest_checkpoint(checkpoint_dir):
     latest_checkpoint = checkpoint_files[-1]
     return os.path.join(checkpoint_dir, latest_checkpoint)
 
-def setup_models(device, diffusion_checkpoint=None, checkpoint_dir=None):
+def setup_models(device, diffusion_checkpoint=None, checkpoint_dir=None, refine_checkpoint=None):
     """
     设置模型
     
@@ -74,20 +113,46 @@ def setup_models(device, diffusion_checkpoint=None, checkpoint_dir=None):
         ).to(device)
         
         checkpoint = torch.load(diffusion_checkpoint, map_location=device)
-        diffusion_model.load_state_dict(checkpoint['model'])
+        load_compatible_model_state(diffusion_model, checkpoint['model'])
+        diffusion_model.latent_stats_computed = True
+
+        if refine_checkpoint is not None:
+            refine_data = torch.load(refine_checkpoint, map_location=device)
+            refine_state = refine_data.get('model', refine_data)
+            print(f"Loading RefineNet from {refine_checkpoint}")
+            load_compatible_model_state(
+                diffusion_model,
+                refine_state,
+                only_prefixes=['refine_net'],
+                label='refine'
+            )
+
         diffusion_model.eval()
         models['diffusion'] = diffusion_model
     
     mano_layer = ManoLayer(center_idx=CENTER_IDX, mano_assets_root="assets/mano_v1_2").to(device)
     models['mano'] = mano_layer
-
-    hand_object = HandObject(device)
-    models['hand_object'] = hand_object
     
     return models
 
-def generate_hand_mesh(models, obj_verts, obj_vn, intent_id):
-    mano_params = models['diffusion'].sample(obj_verts, obj_vn, intent_id)
+@torch.no_grad()
+def generate_hand_mesh(models, obj_verts, obj_vn, intent_id, sampler='ddpm', ddim_steps=50, use_refine=False):
+    if use_refine:
+        mano_params, _ = models['diffusion'].sample_and_refine(
+            obj_verts,
+            obj_vn,
+            intent_id,
+            sampler=sampler,
+            ddim_steps=ddim_steps,
+        )
+    else:
+        mano_params = models['diffusion'].sample(
+            obj_verts,
+            obj_vn,
+            intent_id,
+            sampler=sampler,
+            ddim_steps=ddim_steps,
+        )
 
     pose = mano_params[:, :48]
     trans = mano_params[:, 48:51]
@@ -182,18 +247,29 @@ if __name__ == "__main__":
     parser.add_argument('--device', type=int, default=1)
     parser.add_argument('--checkpoint_dir', type=str, required=True,
                        help='Directory containing checkpoints')
+    parser.add_argument('--diffusion_checkpoint_step', type=int, default=0,
+                       help='Specific diffusion checkpoint step to load; default uses the latest one')
+    parser.add_argument('--refine_checkpoint_step', type=int, default=0,
+                       help='Specific refine checkpoint step to load when --use_refine is enabled')
+    parser.add_argument('--sampler', type=str, default='ddim', choices=['ddpm', 'ddim'],
+                       help='Sampling method for diffusion generation')
+    parser.add_argument('--ddim_steps', type=int, default=50,
+                       help='Number of sampling steps when --sampler=ddim')
+    parser.add_argument('--use_refine', action='store_true',
+                       help='Apply migrated GrabNet-style RefineNet after diffusion sampling')
     
     parser.add_argument('--save_mesh', action='store_true', 
                        help='Also save .ply meshes for visualization')
     
     args = parser.parse_args()
-    
+
     results_dir = os.path.join(args.save_root, "results")
     os.makedirs(results_dir, exist_ok=True)
 
     device = torch.device(f"cuda:{args.device}" if torch.cuda.is_available() else "cpu")
-    torch.cuda.set_device(args.device)
-    torch.cuda.empty_cache()
+    if torch.cuda.is_available():
+        torch.cuda.set_device(args.device)
+        torch.cuda.empty_cache()
     args.device = device
 
     # ✅ 根据 --dataset 加载不同数据集
@@ -206,12 +282,27 @@ if __name__ == "__main__":
     
     test_dl = DataLoader(test_ds, batch_size=1, shuffle=False, pin_memory=True, num_workers=0)
 
-    diffusion_checkpoint = load_latest_checkpoint(args.checkpoint_dir)
-    models = setup_models(device, diffusion_checkpoint, args.checkpoint_dir)
+    diffusion_checkpoint = load_checkpoint(
+        args.checkpoint_dir,
+        stage='diffusion',
+        step=args.diffusion_checkpoint_step,
+    )
+    refine_checkpoint = None
+    if args.use_refine:
+        refine_checkpoint = load_checkpoint(
+            args.checkpoint_dir,
+            stage='refine',
+            step=args.refine_checkpoint_step,
+        )
+    models = setup_models(device, diffusion_checkpoint, args.checkpoint_dir, refine_checkpoint=refine_checkpoint)
 
     print(f"Dataset: {args.dataset}")
     print(f"Results will be saved in: {results_dir}")
     print(f"Total test samples: {len(test_ds)}")
+    print(f"Sampler: {args.sampler}")
+    if args.sampler == 'ddim':
+        print(f"DDIM steps: {args.ddim_steps}")
+    print(f"Use refine: {args.use_refine}")
     print("-" * 60)
 
     for idx, grasp in enumerate(tqdm(test_dl, desc="Generating grasps")):
@@ -222,9 +313,18 @@ if __name__ == "__main__":
         intent_name = grasp["intent_name"][0]
         sample_idx = grasp["sample_idx"].item()  # ✅ 提取样本编号
 
-        hand_verts, hand_joints, mano_params = generate_hand_mesh(models, obj_verts, obj_vn, intent_id)
+        hand_verts, hand_joints, mano_params = generate_hand_mesh(
+            models,
+            obj_verts,
+            obj_vn,
+            intent_id,
+            sampler=args.sampler,
+            ddim_steps=args.ddim_steps,
+            use_refine=args.use_refine,
+        )
         hand_verts_np = hand_verts[0].cpu().numpy()
         hand_joints_np = hand_joints[0].cpu().numpy()
+        mano_params_np = mano_params[0].cpu().numpy()
 
         obj_rotmat = grasp["obj_rotmat"].cpu().numpy()
         if obj_rotmat.ndim == 3:
@@ -235,7 +335,10 @@ if __name__ == "__main__":
             "intent_name": intent_name,
             "hand_verts_r": hand_verts_np,
             "hand_joints_r": hand_joints_np,
+            "mano_params_r": mano_params_np,
             "obj_rotmat": obj_rotmat,
+            "source_sample_idx": int(sample_idx),
+            "generation_idx": 0,
         }
 
         # ✅ 文件名包含样本编号

@@ -4,6 +4,7 @@ import pickle
 import numpy as np
 import torch
 import trimesh
+from collections import defaultdict
 from joblib import Parallel, delayed
 from trimesh import Trimesh
 import torch.nn.functional as F
@@ -11,12 +12,8 @@ import torch.nn.functional as F
 from lib.metrics.basic_metric import AverageMeter
 from lib.metrics.penetration import penetration
 from lib.metrics.intersection import solid_intersection_volume
-from lib.metrics.simulator import simulation_sample
 from lib.metrics.diversity import diversity
 from lib.metrics.diversity import transform_to_canonical, convert_joints
-
-from lib.contact.hand_object import HandObject
-from lib.metrics.affordance_accuracy import compute_affordance_metrics_batch
 
 def _get_unit_scales(linear_unit: str):
     """
@@ -43,10 +40,59 @@ def _unit_scale(unit: str) -> float:
         return 1000.0
     raise ValueError(f"Unsupported diversity_unit: {unit}")
 
+
+def _has_valid_intent_name(item):
+    intent_name = item.get("intent_name", None)
+    if intent_name is None:
+        return False
+    intent_name = str(intent_name).strip()
+    return intent_name not in ("", "unknown", "unknown_intent", "None")
+
+
+def _diversity_group_key(item, group_by: str):
+    obj_id = item.get("obj_id", "unknown_obj")
+    if group_by == "obj":
+        return (obj_id,)
+    if group_by == "obj_intent":
+        return (obj_id, item.get("intent_name", "unknown_intent"))
+    raise ValueError(f"Unsupported diversity_group_by: {group_by}")
+
+
+def _extract_diversity_feature(item, scale: float, use_canonical: bool):
+    joints = item.get("hand_joints_r", None)
+    if joints is None:
+        return None
+
+    joints = np.asarray(joints, dtype=np.float32)
+    if joints.ndim != 2 or joints.shape[1] != 3:
+        return None
+
+    joints = joints * scale
+
+    if use_canonical:
+        with torch.no_grad():
+            jt = torch.from_numpy(joints).float().unsqueeze(0)
+            jt = convert_joints(jt, source="mano", target="biomech")
+            jt_after, _T = transform_to_canonical(jt)
+            jt_after = convert_joints(jt_after, source="biomech", target="mano")
+            joints = jt_after[0].cpu().numpy().astype(np.float32)
+
+    return joints.reshape(-1)
+
 class DumpedGraspsLoader(object):
-    def __init__(self, dumped_grasps_dir, proc_dir):
+    def __init__(
+        self,
+        dumped_grasps_dir,
+        proc_dir,
+        require_watertight=True,
+        require_voxel=True,
+        require_vhacd=True,
+    ):
         self.dumped_grasps_dir = dumped_grasps_dir
         self.proc_dir = proc_dir
+        self.require_watertight = bool(require_watertight)
+        self.require_voxel = bool(require_voxel)
+        self.require_vhacd = bool(require_vhacd)
         grasp_fname = sorted(os.listdir(dumped_grasps_dir))
         grasp_fname = [el for el in grasp_fname if el.endswith(".pkl")]
         self.grasp_files = [os.path.join(dumped_grasps_dir, el) for el in grasp_fname]
@@ -73,11 +119,11 @@ class DumpedGraspsLoader(object):
             obj_vhacd_path = os.path.join(self.proc_dir, "vhacd", f"{obj_id}.obj")
             
             missing_types = []
-            if not os.path.exists(obj_wt_path):
+            if self.require_watertight and not os.path.exists(obj_wt_path):
                 missing_types.append("watertight")
-            if not os.path.exists(obj_vox_path):
+            if self.require_voxel and not os.path.exists(obj_vox_path):
                 missing_types.append("voxel")
-            if not os.path.exists(obj_vhacd_path):
+            if self.require_vhacd and not os.path.exists(obj_vhacd_path):
                 missing_types.append("vhacd")
             
             if missing_types:
@@ -120,19 +166,19 @@ class DumpedGraspsLoader(object):
         obj_vhacd_path = os.path.join(self.proc_dir, "vhacd", f"{obj_id}.obj")
         
         # ✅ 如果任何文件缺失，返回 None（表示跳过该样本）
-        if not os.path.exists(obj_wt_path):
+        if self.require_watertight and not os.path.exists(obj_wt_path):
             return None
-        if not os.path.exists(obj_vox_path):
+        if self.require_voxel and not os.path.exists(obj_vox_path):
             return None
-        if not os.path.exists(obj_vhacd_path):
+        if self.require_vhacd and not os.path.exists(obj_vhacd_path):
             return None
         
-        obj_wt = trimesh.load(obj_wt_path, process=False)
-        obj_vox = trimesh.load(obj_vox_path)
-
-        grasp_item["obj_wt"] = obj_wt
-        grasp_item["obj_vox"] = obj_vox
-        grasp_item["obj_vhacd_path"] = obj_vhacd_path
+        if self.require_watertight:
+            grasp_item["obj_wt"] = trimesh.load(obj_wt_path, process=False)
+        if self.require_voxel:
+            grasp_item["obj_vox"] = trimesh.load(obj_vox_path)
+        if self.require_vhacd:
+            grasp_item["obj_vhacd_path"] = obj_vhacd_path
         grasp_item["hand_faces"] = self.hand_wt_faces
         return grasp_item
 
@@ -152,7 +198,7 @@ def _sample_obj_points_with_normals(obj_wt: Trimesh, n_points: int):
 
 @torch.no_grad()
 def _contact_map_via_hand_object(
-    hand_object: HandObject,
+    hand_object,
     hand_verts_np: np.ndarray,   # (778,3)
     obj_wt: Trimesh,
     n_points: int,
@@ -202,6 +248,8 @@ def evaluate_single_grasp(idx, grasp_loader, sims_dir):
     obj_vox_points = np.asfarray(obj_vox.points, dtype=np.float32)
     obj_element_volume = obj_vox.element_volume
 
+    from lib.metrics.simulator import simulation_sample
+
     pentr_dep = penetration(obj_verts=obj_wt_verts, obj_faces=obj_wt_faces, hand_verts=hand_verts)
 
     pentr_vol = solid_intersection_volume(
@@ -242,8 +290,47 @@ def evaluate_single_grasp(idx, grasp_loader, sims_dir):
     return eval_res
 
 
+def _compute_affordance_results(arg, dumped_grasps_loader):
+    from lib.metrics.affordance_accuracy import compute_affordance_metrics_batch
+
+    print("\n[Affordance] Computing affordance accuracy metrics...")
+    return compute_affordance_metrics_batch(
+        dumped_grasps_loader=dumped_grasps_loader,
+        oakbase_dir=arg.aff_oakbase_dir,
+        meta_dir=arg.aff_meta_dir,
+        n_obj_points=int(arg.intent_n_obj_points),
+        prior_path=getattr(arg, "aff_prior", None),
+    )
+
+
+def _write_affordance_metrics_block(f, aff_results):
+    f.write(f"--- Affordance Accuracy (model-free) ---\n")
+    f.write(f"Prior source: {aff_results['prior_source']}\n")
+    f.write(f"Evaluated: {aff_results['n_evaluated']}\n")
+    f.write(f"Skipped (missing files): {aff_results['n_skipped']}\n")
+    f.write(f"Skipped (no parts): {aff_results['n_no_parts']}\n")
+    f.write(f"Contact-Valid Rate: {aff_results['contact_valid_rate']:.4f}\n")
+    f.write(f"Aff-Acc (all): {aff_results['aff_acc']:.4f}\n")
+    f.write(f"Aff-Ratio (all): {aff_results['aff_ratio']:.4f}\n")
+    f.write(f"Aff-Acc (valid only): {aff_results['aff_acc_valid_only']:.4f}\n")
+    f.write(f"Aff-Ratio (valid only): {aff_results['aff_ratio_valid_only']:.4f}\n")
+
+
+def _print_affordance_metrics_block(aff_results, indent="  "):
+    print(f"\n{indent}--- Affordance Accuracy (model-free) ---")
+    print(f"{indent}Evaluated: {aff_results['n_evaluated']}")
+    print(f"{indent}No parts: {aff_results['n_no_parts']}")
+    print(f"{indent}Contact-Valid Rate: {aff_results['contact_valid_rate']:.4f}")
+    print(f"{indent}Aff-Acc (all): {aff_results['aff_acc']:.4f}")
+    print(f"{indent}Aff-Ratio (all): {aff_results['aff_ratio']:.4f}")
+    print(f"{indent}Aff-Acc (valid only): {aff_results['aff_acc_valid_only']:.4f}")
+    print(f"{indent}Aff-Ratio (valid only): {aff_results['aff_ratio_valid_only']:.4f}")
+
+
 def evaluate_quality_mode(arg):
     """评估核心质量指标（Penetration, Intersection, Simulation, Contact）"""
+    from lib.contact.hand_object import HandObject
+
     # ✅ 修改：统一从 results 目录读取
     dumped_grasps_dir = os.path.join(arg.exp_path, "results")
     simulation_dir = os.path.join(arg.exp_path, "simulation_quality")
@@ -251,7 +338,13 @@ def evaluate_quality_mode(arg):
     os.makedirs(simulation_dir, exist_ok=True)
     os.makedirs(evaluation_dir, exist_ok=True)
 
-    dumped_grasps_loader = DumpedGraspsLoader(dumped_grasps_dir, arg.proc_dir)
+    dumped_grasps_loader = DumpedGraspsLoader(
+        dumped_grasps_dir,
+        arg.proc_dir,
+        require_watertight=True,
+        require_voxel=True,
+        require_vhacd=True,
+    )
 
     task_list = []
     print(f"[Quality Mode] Evaluating {len(dumped_grasps_loader)} grasps...")
@@ -299,14 +392,7 @@ def evaluate_quality_mode(arg):
     # ---- Affordance Accuracy (model-free intent evaluation) ----
     aff_results = None
     if arg.aff_enable:
-        print("\n[Affordance] Computing affordance accuracy metrics...")
-        aff_results = compute_affordance_metrics_batch(
-            dumped_grasps_loader=dumped_grasps_loader,
-            oakbase_dir=arg.aff_oakbase_dir,
-            meta_dir=arg.aff_meta_dir,
-            n_obj_points=int(arg.intent_n_obj_points),
-            prior_path=getattr(arg, "aff_prior", None),
-        )
+        aff_results = _compute_affordance_results(arg, dumped_grasps_loader)
 
     with open(os.path.join(evaluation_dir, "Metric.txt"), "w") as f:
         f.write(f"Total samples: {len(eval_res)}\n")
@@ -318,16 +404,8 @@ def evaluate_quality_mode(arg):
         f.write(f"Simulation Displacement (std, {linear_unit}): {sims_disp_std_out:.6f}\n")
         f.write(f"Contact Ratio: {contact_ratio:.4f}\n")
         if aff_results is not None:
-            f.write(f"\n--- Affordance Accuracy (model-free) ---\n")
-            f.write(f"Prior source: {aff_results['prior_source']}\n")
-            f.write(f"Evaluated: {aff_results['n_evaluated']}\n")
-            f.write(f"Skipped (missing files): {aff_results['n_skipped']}\n")
-            f.write(f"Skipped (no parts): {aff_results['n_no_parts']}\n")
-            f.write(f"Contact-Valid Rate: {aff_results['contact_valid_rate']:.4f}\n")
-            f.write(f"Aff-Acc (all): {aff_results['aff_acc']:.4f}\n")
-            f.write(f"Aff-Ratio (all): {aff_results['aff_ratio']:.4f}\n")
-            f.write(f"Aff-Acc (valid only): {aff_results['aff_acc_valid_only']:.4f}\n")
-            f.write(f"Aff-Ratio (valid only): {aff_results['aff_ratio_valid_only']:.4f}\n")
+            f.write("\n")
+            _write_affordance_metrics_block(f, aff_results)
 
     print(f"\n[Quality Mode] Evaluation done! Results saved in: {evaluation_dir}")
     print(f"  Total samples: {len(eval_res)} ")
@@ -338,23 +416,36 @@ def evaluate_quality_mode(arg):
     print(f"  Sims Disp ({linear_unit}): {sims_disp_out:.6f} ± {sims_disp_std_out:.6f}")
     print(f"  Contact Ratio: {contact_ratio:.4f}")
     if aff_results is not None:
-        print(f"\n  --- Affordance Accuracy (model-free) ---")
-        print(f"  Evaluated: {aff_results['n_evaluated']}")
-        print(f"  No parts: {aff_results['n_no_parts']}")
-        print(f"  Contact-Valid Rate: {aff_results['contact_valid_rate']:.4f}")
-        print(f"  Aff-Acc (all): {aff_results['aff_acc']:.4f}")
-        print(f"  Aff-Ratio (all): {aff_results['aff_ratio']:.4f}")
-        print(f"  Aff-Acc (valid only): {aff_results['aff_acc_valid_only']:.4f}")
-        print(f"  Aff-Ratio (valid only): {aff_results['aff_ratio_valid_only']:.4f}")
+        _print_affordance_metrics_block(aff_results)
+
+
+def evaluate_affordance_mode(arg):
+    dumped_grasps_dir = os.path.join(arg.exp_path, "results")
+    evaluation_dir = os.path.join(arg.exp_path, "evaluations_affordance")
+    os.makedirs(evaluation_dir, exist_ok=True)
+
+    dumped_grasps_loader = DumpedGraspsLoader(
+        dumped_grasps_dir,
+        arg.proc_dir,
+        require_watertight=True,
+        require_voxel=False,
+        require_vhacd=False,
+    )
+    aff_results = _compute_affordance_results(arg, dumped_grasps_loader)
+
+    with open(os.path.join(evaluation_dir, "Metric.txt"), "w") as f:
+        _write_affordance_metrics_block(f, aff_results)
+
+    print(f"\n[Affordance Mode] Evaluation done! Results saved in: {evaluation_dir}")
+    _print_affordance_metrics_block(aff_results, indent="  ")
 
 
 def evaluate_diversity_mode(arg):
     """
-    ✅ HALO 风格（对齐）：
-      - feature: MANO hand joints (hand_joints_r)
-      - optional: convert_joints(mano->biomech) + transform_to_canonical + convert back
-      - scale: default mm
-      - entropy: ln (已在 diversity() 中对齐)
+    按条件分组统计 diversity，避免把跨物体/跨意图差异误算成生成多样性。
+    分组键可选:
+      - (obj_id, intent_name)
+      - (obj_id)
     """
     dumped_grasps_dir = os.path.join(arg.exp_path, "results")
     evaluation_dir = os.path.join(arg.exp_path, "evaluations_diversity")
@@ -373,10 +464,11 @@ def evaluate_diversity_mode(arg):
     grasp_paths = [os.path.join(dumped_grasps_dir, f) for f in grasp_files]
 
     print(f"[Diversity Mode] Loading {len(grasp_paths)} grasps...")
-    print(f"[Diversity Mode] Feature: hand_joints_r (HALO-style), canonical={use_canonical}, unit={unit}, cls_num={cls_num}")
+    requested_group_by = getattr(arg, "diversity_group_by", "auto")
 
-    all_features = []
+    loaded_entries = []
     skipped_count = 0
+    missing_intent_count = 0
 
     for p in grasp_paths:
         try:
@@ -386,56 +478,98 @@ def evaluate_diversity_mode(arg):
             skipped_count += 1
             continue
 
-        joints = item.get("hand_joints_r", None)
-        if joints is None:
+        feat = _extract_diversity_feature(item, scale=scale, use_canonical=use_canonical)
+        if feat is None:
             skipped_count += 1
             continue
 
-        joints = np.asarray(joints, dtype=np.float32)
-        if joints.ndim != 2 or joints.shape[1] != 3:
-            skipped_count += 1
-            continue
+        if not _has_valid_intent_name(item):
+            missing_intent_count += 1
 
-        # ✅ 尺度对齐：m -> (cm/mm)
-        joints = joints * scale
+        loaded_entries.append((item, feat))
 
-        if use_canonical:
-            # HALO 的 canonical 流程：mano -> biomech -> canonical -> mano
-            with torch.no_grad():
-                jt = torch.from_numpy(joints).float().unsqueeze(0)  # (1,J,3) torch
-                jt = convert_joints(jt, source="mano", target="biomech")
-                jt_after, _T = transform_to_canonical(jt)  # -> torch
-                jt_after = convert_joints(jt_after, source="biomech", target="mano")
-                joints = jt_after[0].cpu().numpy().astype(np.float32)
+    if requested_group_by == "auto":
+        effective_group_by = "obj" if missing_intent_count > 0 else "obj_intent"
+    else:
+        effective_group_by = requested_group_by
 
-        feat = joints.reshape(-1)  # (J*3,)
+    grouping_desc = "(obj_id)" if effective_group_by == "obj" else "(obj_id, intent_name)"
+    print(
+        f"[Diversity Mode] Feature: hand_joints_r, canonical={use_canonical}, "
+        f"unit={unit}, cls_num={cls_num}, grouping={grouping_desc}"
+    )
+    if requested_group_by == "auto":
+        print(
+            f"[Diversity Mode] Auto group_by resolved to '{effective_group_by}' "
+            f"(missing intent_name in {missing_intent_count} valid samples)"
+        )
+
+    all_features = []
+    grouped_features = defaultdict(list)
+    for item, feat in loaded_entries:
         all_features.append(feat)
+        grouped_features[_diversity_group_key(item, effective_group_by)].append(feat)
 
     valid_count = len(all_features)
-    if valid_count < 2:
-        entropy_val, avg_dist = 0.0, 0.0
-    else:
+    global_entropy_val, global_avg_dist = 0.0, 0.0
+    if valid_count >= 2:
         cluster_array = np.asarray(all_features, dtype=np.float32)
         actual_cls_num = min(valid_count, cls_num)
-        print(f"[Diversity Mode] Clustering {valid_count} samples into {actual_cls_num} clusters...")
-        entropy_val, avg_dist = diversity(cluster_array, cls_num=actual_cls_num)
+        print(f"[Diversity Mode] Global clustering {valid_count} samples into {actual_cls_num} clusters...")
+        global_entropy_val, global_avg_dist = diversity(cluster_array, cls_num=actual_cls_num)
+
+    per_group_entropy = []
+    per_group_avg_dist = []
+    valid_group_sizes = []
+    skipped_group_singleton = 0
+
+    for feats in grouped_features.values():
+        if len(feats) < 2:
+            skipped_group_singleton += 1
+            continue
+        group_array = np.asarray(feats, dtype=np.float32)
+        actual_cls_num = min(len(group_array), cls_num)
+        ent, avg_dist = diversity(group_array, cls_num=actual_cls_num)
+        per_group_entropy.append(ent)
+        per_group_avg_dist.append(avg_dist)
+        valid_group_sizes.append(len(feats))
+
+    group_count_total = len(grouped_features)
+    group_count_valid = len(valid_group_sizes)
+    grouped_entropy_val = float(np.mean(per_group_entropy)) if per_group_entropy else 0.0
+    grouped_avg_dist = float(np.mean(per_group_avg_dist)) if per_group_avg_dist else 0.0
+    avg_group_size = float(np.mean(valid_group_sizes)) if valid_group_sizes else 0.0
 
     with open(os.path.join(evaluation_dir, "Metric.txt"), "w") as f:
         f.write(f"Total samples: {len(grasp_paths)}\n")
         f.write(f"Valid samples: {valid_count}\n")
         f.write(f"Skipped samples: {skipped_count}\n\n")
-        f.write(f"cls_num (global): {cls_num}\n")
+        f.write(f"group_by(requested): {requested_group_by}\n")
+        f.write(f"group_by(effective): {effective_group_by}\n")
+        f.write(f"missing_intent_name(valid samples): {missing_intent_count}\n")
+        f.write(f"groups_total: {group_count_total}\n")
+        f.write(f"groups_valid(>=2): {group_count_valid}\n")
+        f.write(f"groups_skipped_singleton: {skipped_group_singleton}\n")
+        f.write(f"avg_group_size(valid): {avg_group_size:.4f}\n")
+        f.write(f"cls_num (per-group max): {cls_num}\n")
         f.write(f"feature: hand_joints_r\n")
         f.write(f"canonical: {use_canonical}\n")
         f.write(f"unit: {unit}\n")
-        f.write(f"Diversity Entropy (ln): {float(entropy_val):.4f}\n")
-        f.write(f"Diversity Avg Dist: {float(avg_dist):.4f}\n")
+        f.write(f"Grouped Diversity Entropy (ln): {grouped_entropy_val:.4f}\n")
+        f.write(f"Grouped Diversity Avg Dist: {grouped_avg_dist:.4f}\n")
+        f.write(f"Global Diversity Entropy (ln): {global_entropy_val:.4f}\n")
+        f.write(f"Global Diversity Avg Dist: {global_avg_dist:.4f}\n")
 
     print(f"\n[Diversity Mode] Evaluation done! Results saved in: {evaluation_dir}")
     print(f"  Valid samples: {valid_count}")
     print(f"  Skipped samples: {skipped_count}")
-    print(f"  Diversity Entropy (ln): {float(entropy_val):.4f}")
-    print(f"  Diversity Avg Dist: {float(avg_dist):.4f}")
+    print(f"  Group By: {effective_group_by}")
+    print(f"  Valid groups (>=2): {group_count_valid}/{group_count_total}")
+    print(f"  Avg valid group size: {avg_group_size:.4f}")
+    print(f"  Grouped Diversity Entropy (ln): {grouped_entropy_val:.4f}")
+    print(f"  Grouped Diversity Avg Dist: {grouped_avg_dist:.4f}")
+    print(f"  Global Diversity Entropy (ln): {global_entropy_val:.4f}")
+    print(f"  Global Diversity Avg Dist: {global_avg_dist:.4f}")
 
 
 if __name__ == '__main__':
@@ -445,15 +579,17 @@ if __name__ == '__main__':
     parser.add_argument("--exp_path", type=str, required=True, help="experiment output dir")
     parser.add_argument("--proc_dir", type=str, default="data/GRAB_object_process")
     
-    parser.add_argument('--mode', type=str, choices=['quality', 'diversity'], default='quality',
-                       help='Evaluation mode: quality or diversity')
+    parser.add_argument('--mode', type=str, choices=['quality', 'diversity', 'affordance'], default='quality',
+                       help='Evaluation mode: quality, diversity, or affordance')
     
     parser.add_argument("--diversity_cls_num", type=int, default=20,
-                        help="[Diversity mode] KMeans cluster number (HALO default: 20)")
+                        help="[Diversity mode] KMeans cluster number upper bound used within each condition group")
     parser.add_argument("--diversity_canonical", type=int, default=1,
                         help="[Diversity mode] Use HALO canonical transform (1/0). Default: 1")
     parser.add_argument("--diversity_unit", type=str, choices=["m", "cm", "mm"], default="cm",
-                        help="[Diversity mode] Unit scaling applied to joints before clustering. Default: mm")
+                        help="[Diversity mode] Unit scaling applied to joints before clustering. Default: cm")
+    parser.add_argument("--diversity_group_by", type=str, choices=["auto", "obj_intent", "obj"], default="auto",
+                        help="[Diversity mode] Group by (obj_id, intent_name), by obj_id only, or auto-fallback to obj_id when intent_name is missing")
     
     parser.add_argument("--linear_unit", type=str, choices=["m", "cm"], default="cm")
     
@@ -476,5 +612,7 @@ if __name__ == '__main__':
 
     if arg.mode == 'quality':
         evaluate_quality_mode(arg)
+    elif arg.mode == 'affordance':
+        evaluate_affordance_mode(arg)
     else:
         evaluate_diversity_mode(arg)

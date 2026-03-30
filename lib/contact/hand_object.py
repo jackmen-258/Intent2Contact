@@ -19,7 +19,7 @@ class HandObject:
             obj_verts, obj_vn,
             caps_top=0.0005, 
             caps_bot=-0.0015,
-            caps_rad=0.003,
+            caps_rad=0.001,
             caps_on_hand=False
         )
 

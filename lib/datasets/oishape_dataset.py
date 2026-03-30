@@ -129,8 +129,8 @@ class OIShape:
         self.intent_mode = cfg.INTENT_MODE
         self.category = cfg.OBJ_CATES
 
-        self.use_downsample_mesh = True
-        self.n_samples = 2048
+        self.use_downsample_mesh = bool(getattr(cfg, "USE_DOWNSAMPLE_MESH", True))
+        self.n_samples = int(getattr(cfg, "N_SAMPLES", 2048))
         self.mano_assets_root = "assets/mano_v1_2"
 
         assert 'OAKINK_DIR' in os.environ, "environment variable 'OAKINK_DIR' is not set"
@@ -255,6 +255,7 @@ class OIShape:
             bbox_center = (obj_trimesh.vertices.min(0) + obj_trimesh.vertices.max(0)) / 2
             obj_trimesh.vertices = obj_trimesh.vertices - bbox_center
             self.obj_warehouse[obj_id] = obj_trimesh
+            self.obj_bbox_centers[obj_id] = bbox_center.astype(np.float32)
         return self.obj_warehouse[obj_id]
 
     def get_obj_id(self, idx):
@@ -280,18 +281,23 @@ class OIShape:
     def __getitem__(self, idx):
         grasp = self.grasp_list[idx]
         obj_mesh = self.get_obj_mesh(idx)
+        obj_id = self.get_obj_id(idx)
 
-        sample = trimesh.sample.sample_surface(obj_mesh, self.n_samples)
+        # Deterministic object sampling to keep geometry supervision stable.
+        seed = int(hashlib.md5(obj_id.encode("utf-8")).hexdigest(), 16) % (2**31)
+        sample = trimesh.sample.sample_surface(obj_mesh, self.n_samples, seed=seed)
         
         obj_verts = np.array(sample[0], dtype=np.float32)
         obj_vn = np.array(obj_mesh.face_normals[sample[1]], dtype=np.float32)
-        obj_id = self.get_obj_id(idx)
 
         # 获取手部参数并确保是numpy数组
         hand_pose = np.array(grasp["hand_pose"], dtype=np.float32)   # (48,)
-        hand_tsl = np.array(grasp["hand_tsl"], dtype=np.float32)     # (3,)
         hand_shape = np.array(grasp["hand_shape"], dtype=np.float32) # (10,)
-        hand_verts = np.array(grasp["hand_verts"], dtype=np.float32) # (V,3)
+
+        # 坐标系对齐: 物体已 bbox 居中, 手也减去同一偏移
+        bbox_center = self.obj_bbox_centers[obj_id]
+        hand_tsl = np.array(grasp["hand_tsl"], dtype=np.float32) - bbox_center
+        hand_verts = np.array(grasp["hand_verts"], dtype=np.float32) - bbox_center[None, :]
 
         # 最终确保所有数据类型正确
         obj_verts = np.array(obj_verts, dtype=np.float32)

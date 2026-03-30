@@ -3,4 +3,4 @@ DATASET:
     DATA_ROOT: "data/GRAB/object_models"
     NUM_POINTS: 2048
     INTENT_LIST: ["use", "hold", "liftup", "handover"]
-    NUM_SAMPLES_PER_OBJ: 5
+    NUM_SAMPLES_PER_OBJ: 20

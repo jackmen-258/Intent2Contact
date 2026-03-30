@@ -1,8 +1,15 @@
+import os
+import pickle
+import numpy as np
 import torch
 from torch import nn
 import torch.nn.functional as F
-from pytorch3d.transforms import axis_angle_to_matrix
-
+import pytorch3d.ops
+from pytorch3d.transforms import (
+    axis_angle_to_matrix,
+    matrix_to_axis_angle,
+)
+from pytorch3d.structures import Meshes
 from pytorch3d.loss import chamfer_distance
 from manotorch.manolayer import ManoLayer, MANOOutput
 
@@ -15,11 +22,55 @@ from lib.diffusion.utils import (
     linear_beta_schedule,
     cosine_beta_schedule
 )
-
-import numpy as np
 from lib.networks.pointnet2 import Pointnet2
 from lib.utils.text_embed import SimpleIntentEmbedding
 from lib.datasets.utils import CENTER_IDX
+
+
+def batched_index_select(t, dim, inds):
+    dummy = inds.unsqueeze(-1).expand(*inds.shape, t.size(-1))
+    return t.gather(dim, dummy.long())
+
+
+def point2point_signed(x, y, x_normals=None, y_normals=None):
+    """
+    Signed distance between two point clouds.
+
+    Args:
+        x: (B, P1, 3), e.g. hand vertices
+        y: (B, P2, 3), e.g. object point cloud
+        x_normals: optional (B, P1, 3)
+        y_normals: optional (B, P2, 3)
+
+    Returns:
+        y2x_signed: (B, P2), e.g. object-to-hand signed distance
+        x2y_signed: (B, P1), e.g. hand-to-object distance
+        yidx_near: (B, P2), nearest x index for each y point
+    """
+    _, xidx_near, x_near = pytorch3d.ops.knn_points(x, y, K=1, return_nn=True)
+    _, yidx_near, y_near = pytorch3d.ops.knn_points(y, x, K=1, return_nn=True)
+
+    x_near = x_near[:, :, 0, :]
+    y_near = y_near[:, :, 0, :]
+    xidx_near = xidx_near.squeeze(-1)
+    yidx_near = yidx_near.squeeze(-1)
+
+    x2y = x - x_near
+    y2x = y - y_near
+
+    if x_normals is not None:
+        x_nn = batched_index_select(x_normals, 1, yidx_near)
+        y2x_signed = y2x.norm(dim=-1) * torch.sign((x_nn * y2x).sum(dim=-1))
+    else:
+        y2x_signed = y2x.norm(dim=-1)
+
+    if y_normals is not None:
+        y_nn = batched_index_select(y_normals, 1, xidx_near)
+        x2y_signed = x2y.norm(dim=-1) * torch.sign((y_nn * x2y).sum(dim=-1))
+    else:
+        x2y_signed = x2y.norm(dim=-1)
+
+    return y2x_signed, x2y_signed, yidx_near
 
 def geodesic_loss(pred_aa, gt_aa):
     B = pred_aa.shape[0]
@@ -34,6 +85,30 @@ def geodesic_loss(pred_aa, gt_aa):
     ang = torch.acos(cos)
     
     return ang.mean()
+
+
+def _rotation_matrix_to_rot6d(rot_mats: torch.Tensor) -> torch.Tensor:
+    return rot_mats[..., :2].reshape(rot_mats.shape[0], -1)
+
+
+def _rotation_6d_to_matrix(rot_6d: torch.Tensor) -> torch.Tensor:
+    reshaped_input = rot_6d.view(-1, 3, 2)
+    b1 = F.normalize(reshaped_input[:, :, 0], dim=1)
+    dot_prod = torch.sum(b1 * reshaped_input[:, :, 1], dim=1, keepdim=True)
+    b2 = F.normalize(reshaped_input[:, :, 1] - dot_prod * b1, dim=1)
+    b3 = torch.cross(b1, b2, dim=1)
+    return torch.stack([b1, b2, b3], dim=-1)
+
+
+def _build_unique_edges_from_faces(faces: np.ndarray) -> np.ndarray:
+    edge_set = set()
+    for tri in faces:
+        tri = [int(v) for v in tri]
+        edge_set.add(tuple(sorted((tri[0], tri[1]))))
+        edge_set.add(tuple(sorted((tri[1], tri[2]))))
+        edge_set.add(tuple(sorted((tri[2], tri[0]))))
+    edges = np.asarray(sorted(edge_set), dtype=np.int64)
+    return edges
 
 class ResBlock(nn.Module):
     def __init__(self, dim_in, dim_out):
@@ -51,6 +126,159 @@ class ResBlock(nn.Module):
         h = self.fc1(self.act(self.norm(x)))
         h = self.fc2(h)
         return self.skip(x) + h
+
+
+class GrabNetResBlock(nn.Module):
+    def __init__(self, fin, fout, n_neurons=256):
+        super().__init__()
+        self.fin = fin
+        self.fout = fout
+        self.fc1 = nn.Linear(fin, n_neurons)
+        self.bn1 = nn.BatchNorm1d(n_neurons)
+        self.fc2 = nn.Linear(n_neurons, fout)
+        self.bn2 = nn.BatchNorm1d(fout)
+        if fin != fout:
+            self.fc3 = nn.Linear(fin, fout)
+
+        self.act = nn.LeakyReLU(negative_slope=0.2)
+
+    def forward(self, x, final_nl=True):
+        xin = x if self.fin == self.fout else self.act(self.fc3(x))
+        xout = self.fc1(x)
+        xout = self.bn1(xout)
+        xout = self.act(xout)
+        xout = self.fc2(xout)
+        xout = self.bn2(xout)
+        xout = xin + xout
+        if final_nl:
+            return self.act(xout)
+        return xout
+
+
+class GrabNetStyleRefineNet(nn.Module):
+    def __init__(
+        self,
+        center_idx: int,
+        mano_assets_root: str = "assets/mano_v1_2",
+        v_weights_path: str = "assets/rhand_weight.npy",
+        closed_faces_path: str = "assets/closed_mano_faces.pkl",
+        n_iters: int = 3,
+        h_size: int = 512,
+        dropout: float = 0.3,
+    ):
+        super().__init__()
+        self.n_iters = n_iters
+        self.h_size = h_size
+        self.in_size = 778 + 16 * 6 + 3
+
+        self.mano_layer = ManoLayer(
+            rot_mode="axisang",
+            side="right",
+            center_idx=center_idx,
+            mano_assets_root=mano_assets_root,
+            use_pca=False,
+            flat_hand_mean=True,
+        )
+
+        v_weights = np.load(v_weights_path).astype(np.float32)
+        if os.path.isfile(closed_faces_path):
+            with open(closed_faces_path, "rb") as f:
+                faces = np.asarray(pickle.load(f), dtype=np.int64)
+        else:
+            faces = self.mano_layer.th_faces.detach().cpu().numpy().astype(np.int64)
+        vpe = _build_unique_edges_from_faces(faces)
+
+        self.register_buffer("v_weights", torch.from_numpy(v_weights))
+        self.register_buffer("v_weights2", torch.pow(torch.from_numpy(v_weights), 1.0 / 2.5))
+        self.register_buffer("vpe", torch.from_numpy(vpe).long())
+
+        self.bn1 = nn.BatchNorm1d(778)
+        self.rb1 = GrabNetResBlock(self.in_size, h_size)
+        self.rb2 = GrabNetResBlock(self.in_size + h_size, h_size)
+        self.rb3 = GrabNetResBlock(self.in_size + h_size, h_size)
+        self.out_p = nn.Linear(h_size, 16 * 6)
+        self.out_t = nn.Linear(h_size, 3)
+        self.dropout = nn.Dropout(dropout)
+
+        nn.init.zeros_(self.out_p.weight)
+        nn.init.zeros_(self.out_p.bias)
+        nn.init.zeros_(self.out_t.weight)
+        nn.init.zeros_(self.out_t.bias)
+
+    def params_to_state(self, mano_params: torch.Tensor):
+        pose = mano_params[:, :48]
+        trans = mano_params[:, 48:51]
+        shape = mano_params[:, 51:]
+
+        rot_mats = axis_angle_to_matrix(pose.view(-1, 16, 3))
+        pose_6d = _rotation_matrix_to_rot6d(rot_mats)
+        return pose_6d, trans, shape
+
+    def state_to_params(self, pose_6d: torch.Tensor, trans: torch.Tensor, shape: torch.Tensor):
+        batch_size = pose_6d.shape[0]
+        rot_mats = _rotation_6d_to_matrix(pose_6d).view(batch_size, 16, 3, 3)
+        pose = matrix_to_axis_angle(rot_mats).reshape(batch_size, 48)
+        return torch.cat([pose, trans, shape], dim=-1)
+
+    def params_to_verts(self, mano_params: torch.Tensor):
+        pose = mano_params[:, :48]
+        trans = mano_params[:, 48:51]
+        shape = mano_params[:, 51:]
+        mano_output: MANOOutput = self.mano_layer(pose, shape)
+        return mano_output.verts + trans.unsqueeze(1)
+
+    def _hand_faces(self, batch_size: int, device: torch.device):
+        return self.mano_layer.th_faces.to(device=device, dtype=torch.long).unsqueeze(0).expand(batch_size, -1, -1)
+
+    def compute_h2o_dist(self, hand_verts: torch.Tensor, obj_verts: torch.Tensor):
+        hand_faces = self._hand_faces(hand_verts.shape[0], hand_verts.device)
+        hand_mesh = Meshes(verts=hand_verts, faces=hand_faces)
+        hand_normals = hand_mesh.verts_normals_padded()
+        _, h2o, _ = point2point_signed(hand_verts, obj_verts, x_normals=hand_normals)
+        return h2o.abs()
+
+    def edges_for(self, verts: torch.Tensor):
+        return verts[:, self.vpe[:, 0]] - verts[:, self.vpe[:, 1]]
+
+    def forward(self, coarse_params: torch.Tensor, obj_verts: torch.Tensor):
+        pose_6d, trans, shape = self.params_to_state(coarse_params)
+        coarse_verts = self.params_to_verts(coarse_params)
+        h2o_dist = self.compute_h2o_dist(coarse_verts, obj_verts)
+        coarse_h2o_dist = h2o_dist
+
+        init_pose = pose_6d
+        init_trans = trans
+
+        for i in range(self.n_iters):
+            if i != 0:
+                current_params = self.state_to_params(init_pose, init_trans, shape)
+                current_verts = self.params_to_verts(current_params)
+                h2o_dist = self.compute_h2o_dist(current_verts, obj_verts)
+
+            h2o_dist_bn = self.bn1(h2o_dist)
+            x0 = torch.cat([h2o_dist_bn, init_pose, init_trans], dim=1)
+            x = self.rb1(x0)
+            x = self.dropout(x)
+            x = self.rb2(torch.cat([x, x0], dim=1))
+            x = self.dropout(x)
+            x = self.rb3(torch.cat([x, x0], dim=1))
+            x = self.dropout(x)
+
+            init_pose = init_pose + self.out_p(x)
+            init_trans = init_trans + self.out_t(x)
+
+        refined_params = self.state_to_params(init_pose, init_trans, shape)
+        refined_verts = self.params_to_verts(refined_params)
+        refined_h2o_dist = self.compute_h2o_dist(refined_verts, obj_verts)
+
+        return {
+            "refined_params": refined_params,
+            "refined_verts": refined_verts,
+            "refined_h2o_dist": refined_h2o_dist,
+            "coarse_verts": coarse_verts,
+            "coarse_h2o_dist": coarse_h2o_dist,
+        }
+
 
 class ManoEncoder(nn.Module):
     def __init__(self, in_dim, latent_D):
@@ -190,12 +418,14 @@ class BiAttentionFusion(nn.Module):
         
         # ===== 方向1: Intent-to-Object =====
         # Query: Intent, Key/Value: Object
-        # 语义：意图关注物体的哪些功能区域
-        i2o_out, _ = self.intent_to_obj_attn(
+        # 语义：意图关注物体的哪些功能区域，同时保留注意力权重用于指导O2I聚合
+        i2o_out, i2o_attn = self.intent_to_obj_attn(
             query=intent_h_expanded,   # [B, 1, hidden_dim]
             key=obj_h,                 # [B, N, hidden_dim]
-            value=obj_h                # [B, N, hidden_dim]
-        )  # [B, 1, hidden_dim]
+            value=obj_h,               # [B, N, hidden_dim]
+            need_weights=True,
+            average_attn_weights=True
+        )  # i2o_out: [B, 1, hidden_dim], i2o_attn: [B, 1, N]
 
         i2o_out = self.intent_to_obj_norm(i2o_out.squeeze(1) + intent_h)  # [B, hidden_dim] + residual
 
@@ -212,7 +442,11 @@ class BiAttentionFusion(nn.Module):
         )  # [B, N, hidden_dim]
 
         o2i_out = self.obj_to_intent_norm(o2i_out + obj_h)  # [B, N, hidden_dim] + residual
-        o2i_pooled = o2i_out.mean(dim=1)  # [B, hidden_dim]
+
+        # 用I2O的注意力权重加权聚合O2I输出：聚焦于intent关注的功能区域
+        # i2o_attn: [B, 1, N] → [B, N, 1]
+        attn_weights = i2o_attn.squeeze(1).unsqueeze(-1)  # [B, N, 1]
+        o2i_pooled = (o2i_out * attn_weights).sum(dim=1)  # [B, hidden_dim]
         
         # ===== 融合两个方向 =====
         fused = torch.cat([i2o_out, o2i_pooled], dim=-1)  # [B, hidden_dim * 2]
@@ -250,7 +484,7 @@ class BiAttentionFusion(nn.Module):
         return attn  # [B, N]
 
 class LatentHandDiffusion(nn.Module):
-    def __init__( 
+    def __init__(
         self,
         params_dim = 61,
         latent_dim = 64,
@@ -263,7 +497,13 @@ class LatentHandDiffusion(nn.Module):
         objective = 'pred_x0',
         beta_schedule = 'cosine',
         fusion_type: str = "bi_attn",
-        disable_intent: bool = False
+        disable_intent: bool = False,
+        vae_geom_h2o_weight: float = 5.0,
+        vae_geom_o2h_weight: float = 5.0,
+        refine_n_iters: int = 3,
+        refine_h_size: int = 512,
+        refine_v_weights_path: str = "assets/rhand_weight.npy",
+        refine_closed_faces_path: str = "assets/closed_mano_faces.pkl",
     ):
         super().__init__()
 
@@ -311,9 +551,19 @@ class LatentHandDiffusion(nn.Module):
             center_idx=CENTER_IDX,
             mano_assets_root="assets/mano_v1_2"
         )
+        self.refine_net = GrabNetStyleRefineNet(
+            center_idx=CENTER_IDX,
+            mano_assets_root="assets/mano_v1_2",
+            v_weights_path=refine_v_weights_path,
+            closed_faces_path=refine_closed_faces_path,
+            n_iters=refine_n_iters,
+            h_size=refine_h_size,
+        )
 
         self.objective = objective
         self.loss_type = loss_type
+        self.vae_geom_h2o_weight = vae_geom_h2o_weight
+        self.vae_geom_o2h_weight = vae_geom_o2h_weight
 
         # Beta schedule
         if beta_schedule == 'linear':
@@ -446,6 +696,16 @@ class LatentHandDiffusion(nn.Module):
         params = self.decoder(z)
         return params
 
+    @property
+    def use_vae_geometry_regularization(self):
+        return any(
+            weight > 0.0
+            for weight in (
+                self.vae_geom_h2o_weight,
+                self.vae_geom_o2h_weight,
+            )
+        )
+
     def sample_latent(self, batch_size, device):
         return torch.randn(batch_size, self.latent_dim, device=device)
 
@@ -463,7 +723,48 @@ class LatentHandDiffusion(nn.Module):
         verts = mano_output.verts + trans.unsqueeze(1)  # [B, 778, 3]
         return verts
 
-    def compute_vae_loss(self, mano_params):
+    def verts_to_normals(self, hand_verts):
+        hand_faces = self.mano_layer.th_faces.to(device=hand_verts.device, dtype=torch.long)
+        hand_faces = hand_faces.unsqueeze(0).expand(hand_verts.shape[0], -1, -1)
+        hand_mesh = Meshes(verts=hand_verts, faces=hand_faces)
+        return hand_mesh.verts_normals_padded()
+
+    def compute_vae_geometry_loss(self, pred_verts, obj_verts, hand_verts_gt):
+        zero = pred_verts.new_tensor(0.0)
+
+        if (obj_verts is None) or (hand_verts_gt is None) or (not self.use_vae_geometry_regularization):
+            return {
+                'vae_geom_loss': zero,
+                'vae_h2o_loss': zero,
+                'vae_o2h_loss': zero,
+            }
+
+        pred_normals = self.verts_to_normals(pred_verts)
+
+        with torch.no_grad():
+            gt_normals = self.verts_to_normals(hand_verts_gt)
+            o2h_signed_gt, h2o_gt, _ = point2point_signed(
+                hand_verts_gt, obj_verts, x_normals=gt_normals
+            )
+
+        o2h_signed_pred, h2o_pred, _ = point2point_signed(
+            pred_verts, obj_verts, x_normals=pred_normals
+        )
+        vae_h2o_loss = F.l1_loss(h2o_pred, h2o_gt)
+        vae_o2h_loss = F.l1_loss(o2h_signed_pred, o2h_signed_gt)
+
+        vae_geom_loss = (
+            self.vae_geom_h2o_weight * vae_h2o_loss +
+            self.vae_geom_o2h_weight * vae_o2h_loss
+        )
+
+        return {
+            'vae_geom_loss': vae_geom_loss,
+            'vae_h2o_loss': vae_h2o_loss,
+            'vae_o2h_loss': vae_o2h_loss,
+        }
+
+    def compute_vae_loss(self, mano_params, obj_verts=None, hand_verts_gt=None):
         mu, logvar = self.encode_latent(mano_params)
         z = self.reparameterize(mu, logvar)
         pred_mano_params = self.decode_latent(z)
@@ -472,19 +773,17 @@ class LatentHandDiffusion(nn.Module):
             mu2 = (mu.pow(2)).mean().item()
             sigma2 = (logvar.exp()).mean().item()
 
-        pred_pose, pred_trans, pred_shape = self.parse_params(pred_mano_params)
-        gt_pose, gt_trans, gt_shape = self.parse_params(mano_params)
-        
-        pose_loss = geodesic_loss(pred_pose, gt_pose)
-        trans_loss = F.mse_loss(pred_trans, gt_trans)
-        shape_loss = F.mse_loss(pred_shape, gt_shape)
-
-        recon_loss = pose_loss + 50.0 * trans_loss + 10.0 * shape_loss
+        recon_loss_dict = self.compute_reconstruction_loss(pred_mano_params, mano_params)
+        pose_loss = recon_loss_dict['pose_loss']
+        trans_loss = recon_loss_dict['trans_loss']
+        shape_loss = recon_loss_dict['shape_loss']
+        recon_loss = recon_loss_dict['recon_loss']
         kl_loss = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp(), dim=-1).mean()
 
         pred_verts = self.params_to_verts(pred_mano_params)  # [B, 778, 3]
-        gt_verts = self.params_to_verts(mano_params)      # [B, 778, 3]
+        gt_verts = hand_verts_gt if hand_verts_gt is not None else self.params_to_verts(mano_params)
         cd_loss, _ = chamfer_distance(pred_verts, gt_verts)
+        geom_loss_dict = self.compute_vae_geometry_loss(pred_verts, obj_verts, gt_verts)
 
         loss_dict = {
             'recon_loss': recon_loss,
@@ -495,8 +794,63 @@ class LatentHandDiffusion(nn.Module):
             'kl_loss': kl_loss,
             'mu2': mu2,
             'sigma2': sigma2,
+            **geom_loss_dict,
         }
         return loss_dict
+
+    def compute_reconstruction_loss(self, pred_mano_params, gt_mano_params):
+        pred_pose, pred_trans, pred_shape = self.parse_params(pred_mano_params)
+        gt_pose, gt_trans, gt_shape = self.parse_params(gt_mano_params)
+
+        pose_loss = geodesic_loss(pred_pose, gt_pose)
+        trans_loss = F.mse_loss(pred_trans, gt_trans)
+        shape_loss = F.mse_loss(pred_shape, gt_shape)
+        recon_loss = pose_loss + 50.0 * trans_loss + 10.0 * shape_loss
+
+        return {
+            'recon_loss': recon_loss,
+            'pose_loss': pose_loss,
+            'trans_loss': trans_loss,
+            'shape_loss': shape_loss,
+        }
+
+    def compute_refine_loss(self, coarse_mano_params, gt_mano_params, obj_verts, hand_verts_gt=None):
+        gt_verts = hand_verts_gt if hand_verts_gt is not None else self.params_to_verts(gt_mano_params)
+
+        with torch.no_grad():
+            gt_h2o_dist = self.refine_net.compute_h2o_dist(gt_verts, obj_verts)
+
+        refine_out = self.refine_net(coarse_mano_params, obj_verts)
+        refined_params = refine_out["refined_params"]
+        refined_verts = refine_out["refined_verts"]
+        refined_h2o_dist = refine_out["refined_h2o_dist"]
+
+        v_weights2 = self.refine_net.v_weights2.to(device=refined_verts.device, dtype=refined_verts.dtype)
+
+        loss_dist_h = 35.0 * torch.mean(
+            torch.einsum("ij,j->ij", torch.abs(refined_h2o_dist - gt_h2o_dist), v_weights2)
+        )
+        loss_mesh_rec = 35.0 * torch.mean(
+            torch.einsum("ijk,j->ijk", torch.abs(refined_verts - gt_verts), v_weights2)
+        )
+        loss_edge = 30.0 * F.l1_loss(
+            self.refine_net.edges_for(refined_verts),
+            self.refine_net.edges_for(gt_verts),
+        )
+
+        loss_total = loss_dist_h + loss_mesh_rec + loss_edge
+
+        return loss_total, {
+            "refine_total": loss_total,
+            "refine_dist_h": loss_dist_h,
+            "refine_mesh_rec": loss_mesh_rec,
+            "refine_edge": loss_edge,
+        }
+
+    @torch.no_grad()
+    def refine_from_mano_params(self, coarse_mano_params, obj_verts):
+        refine_out = self.refine_net(coarse_mano_params, obj_verts)
+        return refine_out["refined_params"], refine_out
 
     def predict_start_from_noise(self, x_t, t, noise):
         return (
@@ -515,22 +869,23 @@ class LatentHandDiffusion(nn.Module):
             extract(self.sqrt_alphas_cumprod, t, x_t.shape) * x_t -
             extract(self.sqrt_one_minus_alphas_cumprod, t, x_t.shape) * v
         )
-        
+
+    def predict_x0(self, x_t, t, model_output):
+        if self.objective == 'pred_noise':
+            return self.predict_start_from_noise(x_t, t=t, noise=model_output)
+        if self.objective == 'pred_x0':
+            return model_output
+        if self.objective == 'pred_v':
+            return self.predict_start_from_v(x_t, t=t, v=model_output)
+        raise ValueError(f'unknown objective {self.objective}')
+
     @torch.no_grad()
     def predict(self, x, t, cond):
         return self.denoise_fn(x, t, cond)
 
     def p_mean_variance(self, x, t, cond):
         model_output = self.predict(x, t, cond)
-
-        if self.objective == 'pred_noise':
-            x_start = self.predict_start_from_noise(x, t=t, noise=model_output)
-        elif self.objective == 'pred_x0':
-            x_start = model_output
-        elif self.objective == 'pred_v':
-            x_start = self.predict_start_from_v(x, t=t, v=model_output)
-        else:
-            raise ValueError(f'unknown objective {self.objective}')
+        x_start = self.predict_x0(x, t, model_output)
         
         model_mean, posterior_variance, posterior_log_variance = self.q_posterior(x_start, x, t)
         return model_mean, posterior_variance, posterior_log_variance
@@ -551,6 +906,11 @@ class LatentHandDiffusion(nn.Module):
             extract(self.sqrt_one_minus_alphas_cumprod, t, x_start.shape) * noise
         )
 
+    def predict_noise_from_start(self, x_t, t, x_start):
+        return (
+            x_t - extract(self.sqrt_alphas_cumprod, t, x_t.shape) * x_start
+        ) / extract(self.sqrt_one_minus_alphas_cumprod, t, x_t.shape)
+
     @torch.no_grad()
     def p_sample_loop(self, obj_verts, obj_vn, intent_id):
         device = self.betas.device
@@ -560,13 +920,58 @@ class LatentHandDiffusion(nn.Module):
         z = self.sample_latent(b, device=device)
             
         timesteps = list(range(self.num_timesteps))[::-1]
-        for i in tqdm(timesteps, desc='sampling'):
+        for i in tqdm(timesteps, desc='sampling', disable=True):
             t = torch.full((b,), i, device=device, dtype=torch.long)
             z = self.p_sample(z, t, cond)
             
         z = self.denormalize_latent(z)
-        # clip latent to training distribution range to avoid OOD decoding
-        z = torch.clamp(z, self.latent_mean - 3 * self.latent_std, self.latent_mean + 3 * self.latent_std)
+        mano_params = self.decode_latent(z)
+
+        return mano_params
+
+    @torch.no_grad()
+    def ddim_sample_loop(self, obj_verts, obj_vn, intent_id, sampling_steps=50, eta=0.0):
+        device = self.betas.device
+        b = obj_verts.shape[0]
+
+        sampling_steps = int(sampling_steps)
+        if sampling_steps <= 0:
+            raise ValueError(f"sampling_steps must be positive, got {sampling_steps}")
+        sampling_steps = min(sampling_steps, self.num_timesteps)
+
+        cond = self.encode_condition(obj_verts, obj_vn, intent_id)
+        z = self.sample_latent(b, device=device)
+
+        times = torch.linspace(
+            -1,
+            self.num_timesteps - 1,
+            steps=sampling_steps + 1,
+            device=device,
+        )
+        times = torch.flip(times.to(torch.long), dims=(0,))
+        time_pairs = list(zip(times[:-1].tolist(), times[1:].tolist()))
+
+        for time, time_next in tqdm(time_pairs, desc='sampling', disable=True):
+            t = torch.full((b,), time, device=device, dtype=torch.long)
+            model_output = self.predict(z, t, cond)
+            x_start = self.predict_x0(z, t, model_output)
+            pred_noise = self.predict_noise_from_start(z, t, x_start)
+
+            if time_next < 0:
+                z = x_start
+                continue
+
+            t_next = torch.full((b,), time_next, device=device, dtype=torch.long)
+            alpha = extract(self.alphas_cumprod, t, z.shape)
+            alpha_next = extract(self.alphas_cumprod, t_next, z.shape)
+
+            sigma = eta * torch.sqrt((1.0 - alpha_next) / (1.0 - alpha)) * torch.sqrt(1.0 - alpha / alpha_next)
+            c = torch.sqrt((1.0 - alpha_next - sigma ** 2).clamp(min=0.0))
+            noise = torch.randn_like(z)
+
+            z = torch.sqrt(alpha_next) * x_start + c * pred_noise + sigma * noise
+
+        z = self.denormalize_latent(z)
         mano_params = self.decode_latent(z)
 
         return mano_params
@@ -582,7 +987,7 @@ class LatentHandDiffusion(nn.Module):
     
     def p_losses(self, mano_params, obj_verts, obj_vn, intent_id, t, noise=None):
         with torch.no_grad():
-            mu, logvar = self.encode_latent(mano_params)
+            mu, _ = self.encode_latent(mano_params)
         z_start = mu  # use deterministic encoding (mode of posterior) for diffusion target
 
         # normalize latent for diffusion training
@@ -625,13 +1030,34 @@ class LatentHandDiffusion(nn.Module):
         if t is None:
             t = self.sample_timesteps_logsnr(b, device)
 
-        loss = self.p_losses(mano_params, obj_verts, obj_vn, intent_id, t)
+        loss = self.p_losses(
+            mano_params,
+            obj_verts,
+            obj_vn,
+            intent_id,
+            t,
+            noise=noise,
+        )
 
         return loss
     
     @torch.no_grad()
-    def sample(self, obj_verts, obj_vn, intent_id):
-        return self.p_sample_loop(obj_verts, obj_vn, intent_id)
+    def sample(self, obj_verts, obj_vn, intent_id, sampler='ddpm', ddim_steps=50):
+        sampler = sampler.lower()
+        if sampler == 'ddpm':
+            return self.p_sample_loop(obj_verts, obj_vn, intent_id)
+        if sampler == 'ddim':
+            return self.ddim_sample_loop(obj_verts, obj_vn, intent_id, sampling_steps=ddim_steps)
+        raise ValueError(f"Unknown sampler: {sampler}")
+
+    @torch.no_grad()
+    def sample_and_refine(self, obj_verts, obj_vn, intent_id, sampler='ddpm', ddim_steps=50):
+        coarse_mano_params = self.sample(obj_verts, obj_vn, intent_id, sampler=sampler, ddim_steps=ddim_steps)
+        refined_mano_params, refine_out = self.refine_from_mano_params(coarse_mano_params, obj_verts)
+        return refined_mano_params, {
+            "coarse_mano_params": coarse_mano_params,
+            **refine_out,
+        }
 
     def sample_timesteps_logsnr(self, batch_size, device):
         if not self.use_logsnr_sampling:

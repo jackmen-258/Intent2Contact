@@ -11,7 +11,6 @@ from torch.optim import AdamW
 from torch.utils import data
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
-import torch.nn.functional as F
 from copy import deepcopy
 
 from lib.datasets.oishape_dataset import OIShape
@@ -20,8 +19,6 @@ from lib.contact.hand_object import HandObject
 
 from lib.utils.config import get_config
 from lib.utils.utils import cycle
-from einops import reduce
-from lib.utils.cfg_parser import Config
 from manotorch.manolayer import ManoLayer, MANOOutput
 from lib.datasets.utils import CENTER_IDX
 
@@ -57,6 +54,29 @@ class ModelEMA:
         self.ema.load_state_dict(state_dict, strict=strict)
 
 
+class PoseDisturber(torch.nn.Module):
+    def __init__(self, tsl_sigma=0.02, pose_sigma=0.2, root_rot_sigma=0.004):
+        super().__init__()
+        self.tsl_sigma = float(tsl_sigma)
+        self.pose_sigma = float(pose_sigma)
+        self.root_rot_sigma = float(root_rot_sigma)
+
+    def forward(self, hand_pose, hand_transl):
+        batch_size = hand_pose.shape[0]
+        device = hand_pose.device
+        dtype = hand_pose.dtype
+
+        hand_root_pose = hand_pose[:, :3]
+        hand_rel_pose = hand_pose[:, 3:]
+
+        hand_transl = hand_transl + torch.randn(batch_size, 3, device=device, dtype=dtype) * self.tsl_sigma
+        hand_root_pose = hand_root_pose + torch.randn(batch_size, 3, device=device, dtype=dtype) * self.root_rot_sigma
+        hand_rel_pose = hand_rel_pose + torch.randn(batch_size, hand_rel_pose.shape[1], device=device, dtype=dtype) * self.pose_sigma
+        hand_pose = torch.cat([hand_root_pose, hand_rel_pose], dim=1)
+
+        return hand_pose, hand_transl
+
+
 class LatentHandDiffusionTrainer(object):
     def __init__(self, opt, diffusion_model, stage='vae', train_batch_size=64, 
                  train_num_steps=5000, save_and_val_every=500,
@@ -65,7 +85,7 @@ class LatentHandDiffusionTrainer(object):
         super().__init__()
         self.opt = opt
         
-        assert stage in ('vae', 'diffusion')
+        assert stage in ('vae', 'diffusion', 'refine')
         self.stage = stage
         self.device = torch.device(f"cuda:{opt.device}" if torch.cuda.is_available() else "cpu")
         self.use_wandb = use_wandb
@@ -107,6 +127,51 @@ class LatentHandDiffusionTrainer(object):
         self.scheduler = self.setup_scheduler()
 
         self.use_latent_norm = getattr(opt, 'use_latent_norm', True)
+        self.pose_disturber = PoseDisturber(
+            tsl_sigma=getattr(opt, "refine_tsl_sigma", 0.02),
+            pose_sigma=getattr(opt, "refine_pose_sigma", 0.2),
+            root_rot_sigma=getattr(opt, "refine_root_rot_sigma", 0.004),
+        ).to(self.device)
+
+    @staticmethod
+    def _matches_prefix(key, prefixes):
+        return any(key == prefix or key.startswith(f"{prefix}.") for prefix in prefixes)
+
+    def _load_compatible_state_dict(self, target_module, state_dict, only_prefixes=None, label="model"):
+        current_state = target_module.state_dict()
+        filtered_state = {}
+        skipped_keys = []
+        selected_keys = 0
+
+        for key, value in state_dict.items():
+            if only_prefixes is not None and not self._matches_prefix(key, only_prefixes):
+                continue
+            selected_keys += 1
+            if key in current_state and current_state[key].shape == value.shape:
+                filtered_state[key] = value
+            else:
+                skipped_keys.append(key)
+
+        missing_keys, unexpected_keys = target_module.load_state_dict(filtered_state, strict=False)
+        if only_prefixes is not None:
+            missing_keys = [key for key in missing_keys if self._matches_prefix(key, only_prefixes)]
+
+        if skipped_keys:
+            print(f"[INFO] Skipped {len(skipped_keys)} incompatible {label} keys during load.")
+        if unexpected_keys:
+            print(f"[INFO] Unexpected {label} keys ignored during load: {len(unexpected_keys)}")
+        if missing_keys:
+            print(f"[INFO] Missing {label} keys after compatible load: {len(missing_keys)}")
+        if only_prefixes is not None:
+            print(f"[INFO] Loaded {len(filtered_state)}/{selected_keys} selected {label} keys.")
+
+    def _load_compatible_model_state(self, state_dict, only_prefixes=None, label="model"):
+        self._load_compatible_state_dict(self.model, state_dict, only_prefixes=only_prefixes, label=label)
+
+    def _load_compatible_ema_state(self, state_dict, only_prefixes=None, label="EMA"):
+        if self.ema is None:
+            return
+        self._load_compatible_state_dict(self.ema.ema, state_dict, only_prefixes=only_prefixes, label=label)
 
 
     def setup_stage_parameters(self):
@@ -128,6 +193,7 @@ class LatentHandDiffusionTrainer(object):
         elif self.stage == 'diffusion':
             freeze_module(self.model.encoder, freeze=True)
             freeze_module(self.model.decoder, freeze=True)
+            freeze_module(self.model.refine_net, freeze=True)
 
             freeze_module(self.model.denoise_fn, freeze=False)
             freeze_module(self.model.obj_pointnet, freeze=False)
@@ -135,6 +201,15 @@ class LatentHandDiffusionTrainer(object):
             freeze_module(self.model.fusion, freeze=False)
 
             print("Stage 2: Training Diffusion Model (VAE frozen)")
+        elif self.stage == 'refine':
+            freeze_module(self.model.encoder, freeze=True)
+            freeze_module(self.model.decoder, freeze=True)
+            freeze_module(self.model.denoise_fn, freeze=True)
+            freeze_module(self.model.obj_pointnet, freeze=True)
+            freeze_module(self.model.intent_embed, freeze=True)
+            freeze_module(self.model.fusion, freeze=True)
+            freeze_module(self.model.refine_net, freeze=False)
+            print("Stage 3: Training GrabNet-style RefineNet (diffusion frozen)")
 
     def setup_optimizer(self):
         if self.stage == 'vae':
@@ -150,6 +225,10 @@ class LatentHandDiffusionTrainer(object):
                 {'params': self.model.intent_embed.parameters(), 'lr': 1e-4},
                 {'params': self.model.fusion.parameters(), 'lr': 5e-5}
             ]
+        else:
+            param_groups = [
+                {'params': self.model.refine_net.parameters(), 'lr': 1e-4}
+            ]
 
         return AdamW(param_groups, eps=1e-8, betas=(0.9, 0.999))
     
@@ -160,17 +239,32 @@ class LatentHandDiffusionTrainer(object):
                 T_max=self.train_num_steps,
                 eta_min=1e-5,
             )
-        else:
+        elif self.stage == 'diffusion':
             return CosineAnnealingWarmRestarts(
                 self.optimizer,
                 T_0=self.train_num_steps // 3,
                 T_mult=1,
                 eta_min=1e-6
             )
+        else:
+            return CosineAnnealingLR(
+                self.optimizer,
+                T_max=self.train_num_steps,
+                eta_min=1e-6,
+            )
 
     def prep_dataloader(self, cfg):
-        train_dataset = OIShape(cfg.DATASET.TRAIN)
-        val_dataset = OIShape(cfg.DATASET.VAL)
+        train_cfg = deepcopy(cfg.DATASET.TRAIN)
+        val_cfg = deepcopy(cfg.DATASET.VAL)
+
+        if self.stage == "refine":
+            train_cfg.N_SAMPLES = int(getattr(self.opt, "refine_n_obj_points", 4096))
+            val_cfg.N_SAMPLES = int(getattr(self.opt, "refine_n_obj_points", 4096))
+            train_cfg.AUG_RIGID_P = 0.0
+            val_cfg.AUG_RIGID_P = 0.0
+
+        train_dataset = OIShape(train_cfg)
+        val_dataset = OIShape(val_cfg)
 
         self.ds = train_dataset
         self.val_ds = val_dataset
@@ -251,7 +345,6 @@ class LatentHandDiffusionTrainer(object):
             drop_last=False
         ))
 
-
     def params_to_verts(self, mano_params):
         pose = mano_params[:, :48]
         trans = mano_params[:, 48:51]
@@ -285,13 +378,23 @@ class LatentHandDiffusionTrainer(object):
         
         self.model.compute_latent_stats(train_loader)
 
+    def sample_refine_coarse_params(self, hand_pose, hand_trans, hand_shape):
+        perturbed_pose, perturbed_trans = self.pose_disturber(hand_pose, hand_trans)
+        return torch.cat([perturbed_pose, perturbed_trans, hand_shape], dim=-1)
+
     def train_step_vae(self, grasp):
+        obj_verts = grasp["obj_verts"].to(self.device)
         hand_pose = grasp["hand_pose"].to(self.device)
         hand_trans = grasp["hand_tsl"].to(self.device)
         hand_shape = grasp["hand_shape"].to(self.device)
+        hand_verts = grasp["hand_verts"].to(self.device)
         mano_params = torch.cat([hand_pose, hand_trans, hand_shape], dim=-1)
 
-        loss_dict = self.model.compute_vae_loss(mano_params)
+        loss_dict = self.model.compute_vae_loss(
+            mano_params,
+            obj_verts=obj_verts,
+            hand_verts_gt=hand_verts,
+        )
 
         weight_kl = self.kl_coeff(
             step=self.step,
@@ -304,7 +407,8 @@ class LatentHandDiffusionTrainer(object):
         total_loss = (
             loss_dict['recon_loss'] + 
             weight_kl * loss_dict['kl_loss'] + 
-            self.w_chamfer * loss_dict['cd_loss']
+            self.w_chamfer * loss_dict['cd_loss'] +
+            loss_dict['vae_geom_loss']
         )
         loss_dict['total_loss'] = total_loss
 
@@ -328,22 +432,41 @@ class LatentHandDiffusionTrainer(object):
             mano_params, 
             obj_verts, 
             obj_vn, 
-            intent_id
+            intent_id,
         )
 
         total_loss = diffusion_loss
         loss_dict = {
             'total_loss': total_loss,
-            'diffusion_loss': diffusion_loss
+            'diffusion_loss': diffusion_loss,
         }
-
         return total_loss, loss_dict
 
-    def train_step(self, grasp):
+    def train_step_refine(self, grasp, split='train'):
+        obj_verts = grasp["obj_verts"].to(self.device)
+        hand_pose = grasp["hand_pose"].to(self.device)
+        hand_trans = grasp["hand_tsl"].to(self.device)
+        hand_shape = grasp["hand_shape"].to(self.device)
+        hand_verts = grasp["hand_verts"].to(self.device)
+
+        gt_mano_params = torch.cat([hand_pose, hand_trans, hand_shape], dim=-1)
+        coarse_mano_params = self.sample_refine_coarse_params(hand_pose, hand_trans, hand_shape)
+
+        total_loss, loss_dict = self.model.compute_refine_loss(
+            coarse_mano_params=coarse_mano_params,
+            gt_mano_params=gt_mano_params,
+            obj_verts=obj_verts,
+            hand_verts_gt=hand_verts,
+        )
+        return total_loss, loss_dict
+
+    def train_step(self, grasp, split='train'):
         if self.stage == 'vae':
             return self.train_step_vae(grasp)
         elif self.stage == 'diffusion':
             return self.train_step_diffusion(grasp)
+        elif self.stage == 'refine':
+            return self.train_step_refine(grasp, split=split)
         else:
             raise ValueError(f"Unknown stage: {self.stage}")
 
@@ -359,7 +482,7 @@ class LatentHandDiffusionTrainer(object):
         with torch.no_grad():
             for _ in range(iters):
                 grasp = next(self.val_dl)
-                total_loss, loss_dict = self.train_step(grasp)
+                total_loss, loss_dict = self.train_step(grasp, split='val')
                 total_loss_sum += total_loss.item()
                 for key, value in loss_dict.items():
                     if key not in loss_components:
@@ -406,8 +529,10 @@ class LatentHandDiffusionTrainer(object):
             self.model.encoder.load_state_dict(data['model'], strict=False)
             self.model.decoder.load_state_dict(data['model'], strict=False)
         else:
-            self.model.load_state_dict(data['model'], strict=False)
-        
+            self._load_compatible_model_state(data['model'])
+            if stage == 'diffusion' and hasattr(self.model, 'latent_stats_computed'):
+                self.model.latent_stats_computed = True
+
         if stage == self.stage:
             self.optimizer.load_state_dict(data['optimizer'])
             self.scheduler.load_state_dict(data['scheduler'])
@@ -425,6 +550,13 @@ class LatentHandDiffusionTrainer(object):
         init_step = self.step
         print(f"[INFO] Stage: {self.stage}")
         print(f"[INFO] Total number of samples: {len(self.ds)}")
+        if self.stage == 'refine':
+            print(
+                "[INFO] Refine coarse source: GT + PoseDisturber "
+                f"(tsl_sigma={self.pose_disturber.tsl_sigma}, "
+                f"pose_sigma={self.pose_disturber.pose_sigma}, "
+                f"root_rot_sigma={self.pose_disturber.root_rot_sigma})"
+            )
 
         torch.autograd.set_detect_anomaly(True)
         
@@ -489,7 +621,9 @@ def run_train(opt):
         intent_dim=opt.intent_dim,
         fusion_dim=opt.fusion_dim,
         fusion_type=opt.fusion_type,
-        disable_intent=opt.disable_intent
+        disable_intent=opt.disable_intent,
+        vae_geom_h2o_weight=opt.w_vae_h2o,
+        vae_geom_o2h_weight=opt.w_vae_o2h,
     )
     diffusion_model.to(device)
 
@@ -513,6 +647,8 @@ def run_train(opt):
         print(f"=> Load VAE checkpoint from step {opt.vae_checkpoint_step}")
         trainer.load(opt.vae_checkpoint_step, stage='vae', only_vae=False)
         trainer.step = 0
+    elif opt.stage == 'refine' and opt.diffusion_checkpoint_step > 0:
+        print(f"[INFO] Ignoring diffusion checkpoint step {opt.diffusion_checkpoint_step} for refine training.")
 
     trainer.train()
     torch.cuda.empty_cache()
@@ -522,7 +658,7 @@ def parse_opt():
     parser = argparse.ArgumentParser()
     parser.add_argument('--project', default='runs-ablation', help='project root path')
     parser.add_argument('--exp_name', default='', help='save to project path')
-    parser.add_argument('--device', default="0", help='cuda device')
+    parser.add_argument('--device', default="1", help='cuda device')
     parser.add_argument('--wandb_pj_name', type=str, default='intent2contact', help='wandb project name')
     parser.add_argument('--entity', default='', help='W&B entity')
     parser.add_argument('--seed', type=int, default=3407, help='random seed for reproducibility')
@@ -544,6 +680,8 @@ def parse_opt():
     # Loss weight options
     parser.add_argument('--w_kl', type=float, default=0.01, help='Weight for KL loss')
     parser.add_argument('--w_chamfer', type=float, default=0.1, help='Weight for Chamfer distance loss')
+    parser.add_argument('--w_vae_h2o', type=float, default=5.0, help='Weight for VAE hand-to-object distance matching')
+    parser.add_argument('--w_vae_o2h', type=float, default=5.0, help='Weight for VAE object-to-hand signed distance matching')
 
     # EMA options
     parser.add_argument('--use_ema', action='store_true', help='enable EMA for model weights')
@@ -551,9 +689,11 @@ def parse_opt():
     parser.add_argument('--ema_start', type=int, default=500, help='start EMA update after this step')
 
     # Stage option and model selection
-    parser.add_argument('--stage', type=str, default='vae', choices=['vae', 'diffusion'], help='training stage')
+    parser.add_argument('--stage', type=str, default='vae', choices=['vae', 'diffusion', 'refine'], help='training stage')
     parser.add_argument('--resume_step', type=int, default=0, help='resume training from this step')
     parser.add_argument('--vae_checkpoint_step', type=int, default=20000, help='VAE checkpoint step for diffusion stage')
+    parser.add_argument('--diffusion_checkpoint_step', type=int, default=0,
+                        help='Deprecated for refine training; refine now uses GT+disturbance instead of diffusion coarse cache')
 
     # Latent normalization
     parser.add_argument('--use_latent_norm', action='store_true', help='enable latent variable normalization')
@@ -566,6 +706,14 @@ def parse_opt():
     parser.add_argument('--intent_balanced', action='store_true',
                     help='enable intent-balanced sampling (WeightedRandomSampler) in diffusion stage')
     parser.add_argument('--num_intents', type=int, default=4, help='number of intent classes')
+    parser.add_argument('--refine_n_obj_points', type=int, default=4096, help='number of object surface points for refine stage')
+    parser.add_argument('--refine_tsl_sigma', type=float, default=0.02, help='translation noise sigma for GT+disturbed refine training')
+    parser.add_argument('--refine_pose_sigma', type=float, default=0.2, help='relative hand pose noise sigma for GT+disturbed refine training')
+    parser.add_argument('--refine_root_rot_sigma', type=float, default=0.004, help='global hand rotation noise sigma for GT+disturbed refine training')
+    parser.add_argument('--refine_cache_sampler', type=str, default='ddim', choices=['ddpm', 'ddim'],
+                        help='Deprecated; retained for backward compatibility')
+    parser.add_argument('--refine_cache_ddim_steps', type=int, default=50,
+                        help='Deprecated; retained for backward compatibility')
 
 
     opt = parser.parse_args()
