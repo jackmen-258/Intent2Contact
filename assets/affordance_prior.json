@@ -1,0 +1,2982 @@
+{
+  "binoculars": {
+    "use": {
+      "n_samples": 61,
+      "n_with_contact": 61,
+      "n_part_mismatch": 0,
+      "contact_rate": 1.0,
+      "part_names": [
+        "eyepiece",
+        "objective_lens"
+      ],
+      "part_attrs": [
+        [
+          "attach_to_(eyes)"
+        ],
+        [
+          "point_to_sth",
+          "observe_sth",
+          "held_by_hand"
+        ]
+      ],
+      "contact_dist": [
+        0.0516,
+        0.9484
+      ],
+      "expected_parts": [
+        1
+      ],
+      "is_handover": false,
+      "has_semantic_ambiguity": false,
+      "intent_discriminative": false
+    },
+    "handover": {
+      "n_samples": 117,
+      "n_with_contact": 117,
+      "n_part_mismatch": 0,
+      "contact_rate": 1.0,
+      "part_names": [
+        "eyepiece",
+        "objective_lens"
+      ],
+      "part_attrs": [
+        [
+          "attach_to_(eyes)"
+        ],
+        [
+          "point_to_sth",
+          "observe_sth",
+          "held_by_hand"
+        ]
+      ],
+      "contact_dist": [
+        0.047,
+        0.953
+      ],
+      "expected_parts": [
+        1
+      ],
+      "is_handover": true,
+      "has_semantic_ambiguity": true,
+      "intent_discriminative": false
+    },
+    "hold": {
+      "n_samples": 58,
+      "n_with_contact": 58,
+      "n_part_mismatch": 0,
+      "contact_rate": 1.0,
+      "part_names": [
+        "eyepiece",
+        "objective_lens"
+      ],
+      "part_attrs": [
+        [
+          "attach_to_(eyes)"
+        ],
+        [
+          "point_to_sth",
+          "observe_sth",
+          "held_by_hand"
+        ]
+      ],
+      "contact_dist": [
+        0.0438,
+        0.9562
+      ],
+      "expected_parts": [
+        1
+      ],
+      "is_handover": false,
+      "has_semantic_ambiguity": false,
+      "intent_discriminative": false
+    }
+  },
+  "bottle": {
+    "use": {
+      "n_samples": 278,
+      "n_with_contact": 271,
+      "n_part_mismatch": 61,
+      "contact_rate": 0.9748,
+      "part_names": [
+        "bottle_body",
+        "bottle_cap"
+      ],
+      "part_attrs": [
+        [
+          "contain_sth",
+          "flow_in_sth",
+          "flow_out_sth",
+          "held_by_hand"
+        ],
+        [
+          "secure_sth",
+          "screwed/unscrewed_by_hand"
+        ]
+      ],
+      "contact_dist": [
+        0.9504,
+        0.0496
+      ],
+      "expected_parts": [
+        0
+      ],
+      "is_handover": false,
+      "has_semantic_ambiguity": false,
+      "intent_discriminative": false
+    },
+    "handover": {
+      "n_samples": 718,
+      "n_with_contact": 703,
+      "n_part_mismatch": 149,
+      "contact_rate": 0.9791,
+      "part_names": [
+        "bottle_body",
+        "bottle_cap"
+      ],
+      "part_attrs": [
+        [
+          "contain_sth",
+          "flow_in_sth",
+          "flow_out_sth",
+          "held_by_hand"
+        ],
+        [
+          "secure_sth",
+          "screwed/unscrewed_by_hand"
+        ]
+      ],
+      "contact_dist": [
+        0.9624,
+        0.0376
+      ],
+      "expected_parts": [
+        0
+      ],
+      "is_handover": true,
+      "has_semantic_ambiguity": true,
+      "intent_discriminative": false
+    },
+    "liftup": {
+      "n_samples": 332,
+      "n_with_contact": 328,
+      "n_part_mismatch": 69,
+      "contact_rate": 0.988,
+      "part_names": [
+        "bottle_body",
+        "bottle_cap"
+      ],
+      "part_attrs": [
+        [
+          "contain_sth",
+          "flow_in_sth",
+          "flow_out_sth",
+          "held_by_hand"
+        ],
+        [
+          "secure_sth",
+          "screwed/unscrewed_by_hand"
+        ]
+      ],
+      "contact_dist": [
+        0.8904,
+        0.1096
+      ],
+      "expected_parts": [
+        0
+      ],
+      "is_handover": false,
+      "has_semantic_ambiguity": false,
+      "intent_discriminative": false
+    },
+    "hold": {
+      "n_samples": 279,
+      "n_with_contact": 276,
+      "n_part_mismatch": 54,
+      "contact_rate": 0.9892,
+      "part_names": [
+        "bottle_body",
+        "bottle_cap"
+      ],
+      "part_attrs": [
+        [
+          "contain_sth",
+          "flow_in_sth",
+          "flow_out_sth",
+          "held_by_hand"
+        ],
+        [
+          "secure_sth",
+          "screwed/unscrewed_by_hand"
+        ]
+      ],
+      "contact_dist": [
+        0.9685,
+        0.0315
+      ],
+      "expected_parts": [
+        0
+      ],
+      "is_handover": false,
+      "has_semantic_ambiguity": false,
+      "intent_discriminative": false
+    }
+  },
+  "bowl": {
+    "hold": {
+      "n_samples": 239,
+      "n_with_contact": 237,
+      "n_part_mismatch": 0,
+      "contact_rate": 0.9916,
+      "part_names": [
+        "bowl_body"
+      ],
+      "part_attrs": [
+        [
+          "contain_sth",
+          "flow_in_sth",
+          "flow_out_sth",
+          "held_by_hand"
+        ]
+      ],
+      "contact_dist": [
+        1.0
+      ],
+      "expected_parts": [
+        0
+      ],
+      "is_handover": false,
+      "has_semantic_ambiguity": false,
+      "intent_discriminative": false
+    },
+    "handover": {
+      "n_samples": 174,
+      "n_with_contact": 174,
+      "n_part_mismatch": 0,
+      "contact_rate": 1.0,
+      "part_names": [
+        "bowl_body"
+      ],
+      "part_attrs": [
+        [
+          "contain_sth",
+          "flow_in_sth",
+          "flow_out_sth",
+          "held_by_hand"
+        ]
+      ],
+      "contact_dist": [
+        1.0
+      ],
+      "expected_parts": [
+        0
+      ],
+      "is_handover": true,
+      "has_semantic_ambiguity": true,
+      "intent_discriminative": false
+    },
+    "liftup": {
+      "n_samples": 222,
+      "n_with_contact": 222,
+      "n_part_mismatch": 0,
+      "contact_rate": 1.0,
+      "part_names": [
+        "bowl_body"
+      ],
+      "part_attrs": [
+        [
+          "contain_sth",
+          "flow_in_sth",
+          "flow_out_sth",
+          "held_by_hand"
+        ]
+      ],
+      "contact_dist": [
+        1.0
+      ],
+      "expected_parts": [
+        0
+      ],
+      "is_handover": false,
+      "has_semantic_ambiguity": false,
+      "intent_discriminative": false
+    },
+    "use": {
+      "n_samples": 222,
+      "n_with_contact": 221,
+      "n_part_mismatch": 0,
+      "contact_rate": 0.9955,
+      "part_names": [
+        "bowl_body"
+      ],
+      "part_attrs": [
+        [
+          "contain_sth",
+          "flow_in_sth",
+          "flow_out_sth",
+          "held_by_hand"
+        ]
+      ],
+      "contact_dist": [
+        1.0
+      ],
+      "expected_parts": [
+        0
+      ],
+      "is_handover": false,
+      "has_semantic_ambiguity": false,
+      "intent_discriminative": false
+    }
+  },
+  "camera": {
+    "handover": {
+      "n_samples": 683,
+      "n_with_contact": 683,
+      "n_part_mismatch": 60,
+      "contact_rate": 1.0,
+      "part_names": [
+        "camera_len",
+        "camera_body",
+        "camera_grip_and_control_pannel"
+      ],
+      "part_attrs": [
+        [
+          "point_to_sth",
+          "observe_sth"
+        ],
+        [
+          "no_function"
+        ],
+        [
+          "control_sth",
+          "held_by_hand",
+          "pressed/unpressed_by_hand"
+        ]
+      ],
+      "contact_dist": [
+        0.1372,
+        0.476,
+        0.3868
+      ],
+      "expected_parts": [
+        1,
+        2
+      ],
+      "is_handover": true,
+      "has_semantic_ambiguity": true,
+      "intent_discriminative": false
+    },
+    "use": {
+      "n_samples": 260,
+      "n_with_contact": 259,
+      "n_part_mismatch": 24,
+      "contact_rate": 0.9962,
+      "part_names": [
+        "camera_len",
+        "camera_body",
+        "camera_grip_and_control_pannel"
+      ],
+      "part_attrs": [
+        [
+          "point_to_sth",
+          "observe_sth"
+        ],
+        [
+          "no_function"
+        ],
+        [
+          "control_sth",
+          "held_by_hand",
+          "pressed/unpressed_by_hand"
+        ]
+      ],
+      "contact_dist": [
+        0.0879,
+        0.2442,
+        0.6679
+      ],
+      "expected_parts": [
+        1,
+        2
+      ],
+      "is_handover": false,
+      "has_semantic_ambiguity": false,
+      "intent_discriminative": false
+    },
+    "hold": {
+      "n_samples": 245,
+      "n_with_contact": 245,
+      "n_part_mismatch": 20,
+      "contact_rate": 1.0,
+      "part_names": [
+        "camera_len",
+        "camera_body",
+        "camera_grip_and_control_pannel"
+      ],
+      "part_attrs": [
+        [
+          "point_to_sth",
+          "observe_sth"
+        ],
+        [
+          "no_function"
+        ],
+        [
+          "control_sth",
+          "held_by_hand",
+          "pressed/unpressed_by_hand"
+        ]
+      ],
+      "contact_dist": [
+        0.1612,
+        0.3655,
+        0.4733
+      ],
+      "expected_parts": [
+        1,
+        2
+      ],
+      "is_handover": false,
+      "has_semantic_ambiguity": false,
+      "intent_discriminative": false
+    }
+  },
+  "cup": {
+    "use": {
+      "n_samples": 26,
+      "n_with_contact": 26,
+      "n_part_mismatch": 0,
+      "contact_rate": 1.0,
+      "part_names": [
+        "cup_body"
+      ],
+      "part_attrs": [
+        [
+          "contain_sth",
+          "flow_out_sth",
+          "flow_in_sth",
+          "held_by_hand"
+        ]
+      ],
+      "contact_dist": [
+        1.0
+      ],
+      "expected_parts": [
+        0
+      ],
+      "is_handover": false,
+      "has_semantic_ambiguity": false,
+      "intent_discriminative": false
+    },
+    "handover": {
+      "n_samples": 60,
+      "n_with_contact": 60,
+      "n_part_mismatch": 0,
+      "contact_rate": 1.0,
+      "part_names": [
+        "cup_body"
+      ],
+      "part_attrs": [
+        [
+          "contain_sth",
+          "flow_out_sth",
+          "flow_in_sth",
+          "held_by_hand"
+        ]
+      ],
+      "contact_dist": [
+        1.0
+      ],
+      "expected_parts": [
+        0
+      ],
+      "is_handover": true,
+      "has_semantic_ambiguity": true,
+      "intent_discriminative": false
+    },
+    "liftup": {
+      "n_samples": 15,
+      "n_with_contact": 15,
+      "n_part_mismatch": 0,
+      "contact_rate": 1.0,
+      "part_names": [
+        "cup_body"
+      ],
+      "part_attrs": [
+        [
+          "contain_sth",
+          "flow_out_sth",
+          "flow_in_sth",
+          "held_by_hand"
+        ]
+      ],
+      "contact_dist": [
+        1.0
+      ],
+      "expected_parts": [
+        0
+      ],
+      "is_handover": false,
+      "has_semantic_ambiguity": false,
+      "intent_discriminative": false
+    }
+  },
+  "cylinder_bottle": {
+    "handover": {
+      "n_samples": 2110,
+      "n_with_contact": 2108,
+      "n_part_mismatch": 681,
+      "contact_rate": 0.9991,
+      "part_names": [
+        "bottle_body",
+        "bottle_cap"
+      ],
+      "part_attrs": [
+        [
+          "contain_sth",
+          "flow_in_sth",
+          "flow_out_sth",
+          "held_by_hand"
+        ],
+        [
+          "secure_sth",
+          "screwed/unscrewed_by_hand"
+        ]
+      ],
+      "contact_dist": [
+        0.8702,
+        0.1298
+      ],
+      "expected_parts": [
+        0
+      ],
+      "is_handover": true,
+      "has_semantic_ambiguity": true,
+      "intent_discriminative": false
+    },
+    "use": {
+      "n_samples": 1157,
+      "n_with_contact": 1155,
+      "n_part_mismatch": 392,
+      "contact_rate": 0.9983,
+      "part_names": [
+        "bottle_body",
+        "bottle_cap"
+      ],
+      "part_attrs": [
+        [
+          "contain_sth",
+          "flow_in_sth",
+          "flow_out_sth",
+          "held_by_hand"
+        ],
+        [
+          "secure_sth",
+          "screwed/unscrewed_by_hand"
+        ]
+      ],
+      "contact_dist": [
+        0.9708,
+        0.0292
+      ],
+      "expected_parts": [
+        0
+      ],
+      "is_handover": false,
+      "has_semantic_ambiguity": false,
+      "intent_discriminative": false
+    },
+    "hold": {
+      "n_samples": 648,
+      "n_with_contact": 648,
+      "n_part_mismatch": 200,
+      "contact_rate": 1.0,
+      "part_names": [
+        "bottle_body",
+        "bottle_cap"
+      ],
+      "part_attrs": [
+        [
+          "contain_sth",
+          "flow_in_sth",
+          "flow_out_sth",
+          "held_by_hand"
+        ],
+        [
+          "secure_sth",
+          "screwed/unscrewed_by_hand"
+        ]
+      ],
+      "contact_dist": [
+        0.8585,
+        0.1415
+      ],
+      "expected_parts": [
+        0
+      ],
+      "is_handover": false,
+      "has_semantic_ambiguity": false,
+      "intent_discriminative": false
+    },
+    "liftup": {
+      "n_samples": 1162,
+      "n_with_contact": 1162,
+      "n_part_mismatch": 405,
+      "contact_rate": 1.0,
+      "part_names": [
+        "bottle_body",
+        "bottle_cap"
+      ],
+      "part_attrs": [
+        [
+          "contain_sth",
+          "flow_in_sth",
+          "flow_out_sth",
+          "held_by_hand"
+        ],
+        [
+          "secure_sth",
+          "screwed/unscrewed_by_hand"
+        ]
+      ],
+      "contact_dist": [
+        0.9569,
+        0.0431
+      ],
+      "expected_parts": [
+        0
+      ],
+      "is_handover": false,
+      "has_semantic_ambiguity": false,
+      "intent_discriminative": false
+    }
+  },
+  "eyeglasses": {
+    "use": {
+      "n_samples": 114,
+      "n_with_contact": 114,
+      "n_part_mismatch": 0,
+      "contact_rate": 1.0,
+      "part_names": [
+        "lens_and_bridge",
+        "left_template_bar",
+        "right_template_bar"
+      ],
+      "part_attrs": [
+        [
+          "attach_to_(eyes)",
+          "observe_sth",
+          "point_to_sth"
+        ],
+        [
+          "attach_to_(top_of_ear)",
+          "held_by_hand"
+        ],
+        [
+          "attach_to_(top_of_ear)",
+          "held_by_hand"
+        ]
+      ],
+      "contact_dist": [
+        0.1466,
+        0.0013,
+        0.8522
+      ],
+      "expected_parts": [
+        2
+      ],
+      "is_handover": false,
+      "has_semantic_ambiguity": false,
+      "intent_discriminative": true
+    },
+    "handover": {
+      "n_samples": 254,
+      "n_with_contact": 252,
+      "n_part_mismatch": 0,
+      "contact_rate": 0.9921,
+      "part_names": [
+        "lens_and_bridge",
+        "left_template_bar",
+        "right_template_bar"
+      ],
+      "part_attrs": [
+        [
+          "attach_to_(eyes)",
+          "observe_sth",
+          "point_to_sth"
+        ],
+        [
+          "attach_to_(top_of_ear)",
+          "held_by_hand"
+        ],
+        [
+          "attach_to_(top_of_ear)",
+          "held_by_hand"
+        ]
+      ],
+      "contact_dist": [
+        0.5317,
+        0.1194,
+        0.349
+      ],
+      "expected_parts": [
+        0,
+        2
+      ],
+      "is_handover": true,
+      "has_semantic_ambiguity": true,
+      "intent_discriminative": true
+    },
+    "liftup": {
+      "n_samples": 110,
+      "n_with_contact": 109,
+      "n_part_mismatch": 0,
+      "contact_rate": 0.9909,
+      "part_names": [
+        "lens_and_bridge",
+        "left_template_bar",
+        "right_template_bar"
+      ],
+      "part_attrs": [
+        [
+          "attach_to_(eyes)",
+          "observe_sth",
+          "point_to_sth"
+        ],
+        [
+          "attach_to_(top_of_ear)",
+          "held_by_hand"
+        ],
+        [
+          "attach_to_(top_of_ear)",
+          "held_by_hand"
+        ]
+      ],
+      "contact_dist": [
+        0.3664,
+        0.0006,
+        0.633
+      ],
+      "expected_parts": [
+        0,
+        2
+      ],
+      "is_handover": false,
+      "has_semantic_ambiguity": false,
+      "intent_discriminative": true
+    },
+    "hold": {
+      "n_samples": 105,
+      "n_with_contact": 105,
+      "n_part_mismatch": 0,
+      "contact_rate": 1.0,
+      "part_names": [
+        "lens_and_bridge",
+        "left_template_bar",
+        "right_template_bar"
+      ],
+      "part_attrs": [
+        [
+          "attach_to_(eyes)",
+          "observe_sth",
+          "point_to_sth"
+        ],
+        [
+          "attach_to_(top_of_ear)",
+          "held_by_hand"
+        ],
+        [
+          "attach_to_(top_of_ear)",
+          "held_by_hand"
+        ]
+      ],
+      "contact_dist": [
+        0.8684,
+        0.1315,
+        0.0001
+      ],
+      "expected_parts": [
+        0
+      ],
+      "is_handover": false,
+      "has_semantic_ambiguity": false,
+      "intent_discriminative": true
+    }
+  },
+  "flashlight": {
+    "handover": {
+      "n_samples": 48,
+      "n_with_contact": 48,
+      "n_part_mismatch": 0,
+      "contact_rate": 1.0,
+      "part_names": [
+        "bulb_and_reflector",
+        "flashlight_handle"
+      ],
+      "part_attrs": [
+        [
+          "point_to_sth",
+          "illuminate_sth"
+        ],
+        [
+          "held_by_hand"
+        ]
+      ],
+      "contact_dist": [
+        0.3872,
+        0.6128
+      ],
+      "expected_parts": [
+        0,
+        1
+      ],
+      "is_handover": true,
+      "has_semantic_ambiguity": true,
+      "intent_discriminative": true
+    },
+    "use": {
+      "n_samples": 32,
+      "n_with_contact": 32,
+      "n_part_mismatch": 0,
+      "contact_rate": 1.0,
+      "part_names": [
+        "bulb_and_reflector",
+        "flashlight_handle"
+      ],
+      "part_attrs": [
+        [
+          "point_to_sth",
+          "illuminate_sth"
+        ],
+        [
+          "held_by_hand"
+        ]
+      ],
+      "contact_dist": [
+        0.005,
+        0.995
+      ],
+      "expected_parts": [
+        1
+      ],
+      "is_handover": false,
+      "has_semantic_ambiguity": false,
+      "intent_discriminative": true
+    }
+  },
+  "frying_pan": {
+    "handover": {
+      "n_samples": 17,
+      "n_with_contact": 17,
+      "n_part_mismatch": 0,
+      "contact_rate": 1.0,
+      "part_names": [
+        "pan_body",
+        "pan_handle"
+      ],
+      "part_attrs": [
+        [
+          "contain_sth",
+          "flow_in_sth",
+          "flow_out_sth",
+          "connect_sth"
+        ],
+        [
+          "held_by_hand"
+        ]
+      ],
+      "contact_dist": [
+        0.5465,
+        0.4535
+      ],
+      "expected_parts": [
+        0,
+        1
+      ],
+      "is_handover": true,
+      "has_semantic_ambiguity": true,
+      "intent_discriminative": true
+    },
+    "hold": {
+      "n_samples": 6,
+      "n_with_contact": 6,
+      "n_part_mismatch": 0,
+      "contact_rate": 1.0,
+      "part_names": [
+        "pan_body",
+        "pan_handle"
+      ],
+      "part_attrs": [
+        [
+          "contain_sth",
+          "flow_in_sth",
+          "flow_out_sth",
+          "connect_sth"
+        ],
+        [
+          "held_by_hand"
+        ]
+      ],
+      "contact_dist": [
+        1.0,
+        0.0
+      ],
+      "expected_parts": [
+        0
+      ],
+      "is_handover": false,
+      "has_semantic_ambiguity": false,
+      "intent_discriminative": true
+    },
+    "use": {
+      "n_samples": 10,
+      "n_with_contact": 10,
+      "n_part_mismatch": 0,
+      "contact_rate": 1.0,
+      "part_names": [
+        "pan_body",
+        "pan_handle"
+      ],
+      "part_attrs": [
+        [
+          "contain_sth",
+          "flow_in_sth",
+          "flow_out_sth",
+          "connect_sth"
+        ],
+        [
+          "held_by_hand"
+        ]
+      ],
+      "contact_dist": [
+        0.1059,
+        0.8941
+      ],
+      "expected_parts": [
+        1
+      ],
+      "is_handover": false,
+      "has_semantic_ambiguity": false,
+      "intent_discriminative": true
+    }
+  },
+  "game_controller": {
+    "use": {
+      "n_samples": 28,
+      "n_with_contact": 28,
+      "n_part_mismatch": 0,
+      "contact_rate": 1.0,
+      "part_names": [
+        "controller_pannel",
+        "controller_handles"
+      ],
+      "part_attrs": [
+        [
+          "control_sth",
+          "pressed/unpressed_by_hand"
+        ],
+        [
+          "held_by_hand"
+        ]
+      ],
+      "contact_dist": [
+        0.5613,
+        0.4387
+      ],
+      "expected_parts": [
+        0,
+        1
+      ],
+      "is_handover": false,
+      "has_semantic_ambiguity": false,
+      "intent_discriminative": false
+    },
+    "handover": {
+      "n_samples": 56,
+      "n_with_contact": 56,
+      "n_part_mismatch": 0,
+      "contact_rate": 1.0,
+      "part_names": [
+        "controller_pannel",
+        "controller_handles"
+      ],
+      "part_attrs": [
+        [
+          "control_sth",
+          "pressed/unpressed_by_hand"
+        ],
+        [
+          "held_by_hand"
+        ]
+      ],
+      "contact_dist": [
+        0.5755,
+        0.4245
+      ],
+      "expected_parts": [
+        0,
+        1
+      ],
+      "is_handover": true,
+      "has_semantic_ambiguity": true,
+      "intent_discriminative": false
+    },
+    "hold": {
+      "n_samples": 15,
+      "n_with_contact": 15,
+      "n_part_mismatch": 0,
+      "contact_rate": 1.0,
+      "part_names": [
+        "controller_pannel",
+        "controller_handles"
+      ],
+      "part_attrs": [
+        [
+          "control_sth",
+          "pressed/unpressed_by_hand"
+        ],
+        [
+          "held_by_hand"
+        ]
+      ],
+      "contact_dist": [
+        0.5746,
+        0.4254
+      ],
+      "expected_parts": [
+        0,
+        1
+      ],
+      "is_handover": false,
+      "has_semantic_ambiguity": false,
+      "intent_discriminative": false
+    }
+  },
+  "hammer": {
+    "handover": {
+      "n_samples": 43,
+      "n_with_contact": 43,
+      "n_part_mismatch": 0,
+      "contact_rate": 1.0,
+      "part_names": [
+        "hammer_head",
+        "hammer_grip"
+      ],
+      "part_attrs": [
+        [
+          "knock_sth"
+        ],
+        [
+          "held_by_hand"
+        ]
+      ],
+      "contact_dist": [
+        0.3666,
+        0.6334
+      ],
+      "expected_parts": [
+        0,
+        1
+      ],
+      "is_handover": true,
+      "has_semantic_ambiguity": true,
+      "intent_discriminative": true
+    },
+    "use": {
+      "n_samples": 17,
+      "n_with_contact": 17,
+      "n_part_mismatch": 0,
+      "contact_rate": 1.0,
+      "part_names": [
+        "hammer_head",
+        "hammer_grip"
+      ],
+      "part_attrs": [
+        [
+          "knock_sth"
+        ],
+        [
+          "held_by_hand"
+        ]
+      ],
+      "contact_dist": [
+        0.0,
+        1.0
+      ],
+      "expected_parts": [
+        1
+      ],
+      "is_handover": false,
+      "has_semantic_ambiguity": false,
+      "intent_discriminative": true
+    }
+  },
+  "headphones": {
+    "handover": {
+      "n_samples": 125,
+      "n_with_contact": 125,
+      "n_part_mismatch": 3,
+      "contact_rate": 1.0,
+      "part_names": [
+        "headband",
+        "left_ear_cap",
+        "right_ear_cap"
+      ],
+      "part_attrs": [
+        [
+          "attach_to_(head)"
+        ],
+        [
+          "attach_to_(ear)"
+        ],
+        [
+          "attach_to_(ear)"
+        ]
+      ],
+      "contact_dist": [
+        0.5808,
+        0.4057,
+        0.0135
+      ],
+      "expected_parts": [
+        0,
+        1
+      ],
+      "is_handover": true,
+      "has_semantic_ambiguity": true,
+      "intent_discriminative": true
+    },
+    "hold": {
+      "n_samples": 117,
+      "n_with_contact": 117,
+      "n_part_mismatch": 4,
+      "contact_rate": 1.0,
+      "part_names": [
+        "headband",
+        "left_ear_cap",
+        "right_ear_cap"
+      ],
+      "part_attrs": [
+        [
+          "attach_to_(head)"
+        ],
+        [
+          "attach_to_(ear)"
+        ],
+        [
+          "attach_to_(ear)"
+        ]
+      ],
+      "contact_dist": [
+        0.9774,
+        0.0225,
+        0.0001
+      ],
+      "expected_parts": [
+        0
+      ],
+      "is_handover": false,
+      "has_semantic_ambiguity": false,
+      "intent_discriminative": true
+    },
+    "use": {
+      "n_samples": 116,
+      "n_with_contact": 116,
+      "n_part_mismatch": 4,
+      "contact_rate": 1.0,
+      "part_names": [
+        "headband",
+        "left_ear_cap",
+        "right_ear_cap"
+      ],
+      "part_attrs": [
+        [
+          "attach_to_(head)"
+        ],
+        [
+          "attach_to_(ear)"
+        ],
+        [
+          "attach_to_(ear)"
+        ]
+      ],
+      "contact_dist": [
+        0.1523,
+        0.4599,
+        0.3877
+      ],
+      "expected_parts": [
+        1,
+        2
+      ],
+      "is_handover": false,
+      "has_semantic_ambiguity": false,
+      "intent_discriminative": true
+    }
+  },
+  "knife": {
+    "handover": {
+      "n_samples": 1599,
+      "n_with_contact": 1599,
+      "n_part_mismatch": 0,
+      "contact_rate": 1.0,
+      "part_names": [
+        "knife_blade",
+        "knife_handle"
+      ],
+      "part_attrs": [
+        [
+          "cut_sth",
+          "stab_sth"
+        ],
+        [
+          "held_by_hand"
+        ]
+      ],
+      "contact_dist": [
+        0.5464,
+        0.4536
+      ],
+      "expected_parts": [
+        0,
+        1
+      ],
+      "is_handover": true,
+      "has_semantic_ambiguity": true,
+      "intent_discriminative": true
+    },
+    "use": {
+      "n_samples": 2269,
+      "n_with_contact": 2269,
+      "n_part_mismatch": 0,
+      "contact_rate": 1.0,
+      "part_names": [
+        "knife_blade",
+        "knife_handle"
+      ],
+      "part_attrs": [
+        [
+          "cut_sth",
+          "stab_sth"
+        ],
+        [
+          "held_by_hand"
+        ]
+      ],
+      "contact_dist": [
+        0.0692,
+        0.9308
+      ],
+      "expected_parts": [
+        1
+      ],
+      "is_handover": false,
+      "has_semantic_ambiguity": false,
+      "intent_discriminative": true
+    }
+  },
+  "lightbulb": {
+    "use": {
+      "n_samples": 19,
+      "n_with_contact": 19,
+      "n_part_mismatch": 0,
+      "contact_rate": 1.0,
+      "part_names": [
+        "bulb",
+        "lightbulb_connector"
+      ],
+      "part_attrs": [
+        [
+          "illuminate_sth"
+        ],
+        [
+          "connect_to_sth_(screw)"
+        ]
+      ],
+      "contact_dist": [
+        1.0,
+        0.0
+      ],
+      "expected_parts": [
+        0
+      ],
+      "is_handover": false,
+      "has_semantic_ambiguity": false,
+      "intent_discriminative": true
+    },
+    "handover": {
+      "n_samples": 38,
+      "n_with_contact": 38,
+      "n_part_mismatch": 0,
+      "contact_rate": 1.0,
+      "part_names": [
+        "bulb",
+        "lightbulb_connector"
+      ],
+      "part_attrs": [
+        [
+          "illuminate_sth"
+        ],
+        [
+          "connect_to_sth_(screw)"
+        ]
+      ],
+      "contact_dist": [
+        0.7215,
+        0.2785
+      ],
+      "expected_parts": [
+        0,
+        1
+      ],
+      "is_handover": true,
+      "has_semantic_ambiguity": true,
+      "intent_discriminative": true
+    }
+  },
+  "lotion_bottle": {
+    "use": {
+      "n_samples": 135,
+      "n_with_contact": 135,
+      "n_part_mismatch": 5,
+      "contact_rate": 1.0,
+      "part_names": [
+        "pump_head",
+        "bottle_body"
+      ],
+      "part_attrs": [
+        [
+          "secure_sth",
+          "pump_out_sth",
+          "pressed/unpressed_by_hand"
+        ],
+        [
+          "contain_sth",
+          "flow_in_sth",
+          "flow_out_sth",
+          "held_by_hand"
+        ]
+      ],
+      "contact_dist": [
+        0.1236,
+        0.8764
+      ],
+      "expected_parts": [
+        1
+      ],
+      "is_handover": false,
+      "has_semantic_ambiguity": false,
+      "intent_discriminative": false
+    },
+    "liftup": {
+      "n_samples": 126,
+      "n_with_contact": 126,
+      "n_part_mismatch": 4,
+      "contact_rate": 1.0,
+      "part_names": [
+        "pump_head",
+        "bottle_body"
+      ],
+      "part_attrs": [
+        [
+          "secure_sth",
+          "pump_out_sth",
+          "pressed/unpressed_by_hand"
+        ],
+        [
+          "contain_sth",
+          "flow_in_sth",
+          "flow_out_sth",
+          "held_by_hand"
+        ]
+      ],
+      "contact_dist": [
+        0.0519,
+        0.9481
+      ],
+      "expected_parts": [
+        1
+      ],
+      "is_handover": false,
+      "has_semantic_ambiguity": false,
+      "intent_discriminative": false
+    },
+    "handover": {
+      "n_samples": 340,
+      "n_with_contact": 340,
+      "n_part_mismatch": 7,
+      "contact_rate": 1.0,
+      "part_names": [
+        "pump_head",
+        "bottle_body"
+      ],
+      "part_attrs": [
+        [
+          "secure_sth",
+          "pump_out_sth",
+          "pressed/unpressed_by_hand"
+        ],
+        [
+          "contain_sth",
+          "flow_in_sth",
+          "flow_out_sth",
+          "held_by_hand"
+        ]
+      ],
+      "contact_dist": [
+        0.0541,
+        0.9459
+      ],
+      "expected_parts": [
+        1
+      ],
+      "is_handover": true,
+      "has_semantic_ambiguity": true,
+      "intent_discriminative": false
+    },
+    "hold": {
+      "n_samples": 164,
+      "n_with_contact": 164,
+      "n_part_mismatch": 3,
+      "contact_rate": 1.0,
+      "part_names": [
+        "pump_head",
+        "bottle_body"
+      ],
+      "part_attrs": [
+        [
+          "secure_sth",
+          "pump_out_sth",
+          "pressed/unpressed_by_hand"
+        ],
+        [
+          "contain_sth",
+          "flow_in_sth",
+          "flow_out_sth",
+          "held_by_hand"
+        ]
+      ],
+      "contact_dist": [
+        0.0006,
+        0.9994
+      ],
+      "expected_parts": [
+        1
+      ],
+      "is_handover": false,
+      "has_semantic_ambiguity": false,
+      "intent_discriminative": false
+    }
+  },
+  "mouse": {
+    "use": {
+      "n_samples": 6,
+      "n_with_contact": 6,
+      "n_part_mismatch": 0,
+      "contact_rate": 1.0,
+      "part_names": [
+        "mouse_control_buttons",
+        "mouse_body"
+      ],
+      "part_attrs": [
+        [
+          "control_sth",
+          "pressed/unpressed_by_hand"
+        ],
+        [
+          "held_by_hand"
+        ]
+      ],
+      "contact_dist": [
+        0.2728,
+        0.7272
+      ],
+      "expected_parts": [
+        0,
+        1
+      ],
+      "is_handover": false,
+      "has_semantic_ambiguity": false,
+      "intent_discriminative": true
+    },
+    "handover": {
+      "n_samples": 10,
+      "n_with_contact": 10,
+      "n_part_mismatch": 0,
+      "contact_rate": 1.0,
+      "part_names": [
+        "mouse_control_buttons",
+        "mouse_body"
+      ],
+      "part_attrs": [
+        [
+          "control_sth",
+          "pressed/unpressed_by_hand"
+        ],
+        [
+          "held_by_hand"
+        ]
+      ],
+      "contact_dist": [
+        0.6433,
+        0.3567
+      ],
+      "expected_parts": [
+        0,
+        1
+      ],
+      "is_handover": true,
+      "has_semantic_ambiguity": true,
+      "intent_discriminative": true
+    },
+    "hold": {
+      "n_samples": 5,
+      "n_with_contact": 4,
+      "n_part_mismatch": 0,
+      "contact_rate": 0.8,
+      "part_names": [
+        "mouse_control_buttons",
+        "mouse_body"
+      ],
+      "part_attrs": [
+        [
+          "control_sth",
+          "pressed/unpressed_by_hand"
+        ],
+        [
+          "held_by_hand"
+        ]
+      ],
+      "contact_dist": [
+        0.1242,
+        0.8758
+      ],
+      "expected_parts": [
+        1
+      ],
+      "is_handover": false,
+      "has_semantic_ambiguity": false,
+      "intent_discriminative": true
+    }
+  },
+  "mug": {
+    "use": {
+      "n_samples": 6158,
+      "n_with_contact": 6157,
+      "n_part_mismatch": 55,
+      "contact_rate": 0.9998,
+      "part_names": [
+        "mug_body",
+        "mug_handle"
+      ],
+      "part_attrs": [
+        [
+          "contain_sth",
+          "flow_out_sth",
+          "flow_in_sth",
+          "held_by_hand"
+        ],
+        [
+          "held_by_hand"
+        ]
+      ],
+      "contact_dist": [
+        0.241,
+        0.759
+      ],
+      "expected_parts": [
+        1
+      ],
+      "is_handover": false,
+      "has_semantic_ambiguity": false,
+      "intent_discriminative": true
+    },
+    "liftup": {
+      "n_samples": 6689,
+      "n_with_contact": 6689,
+      "n_part_mismatch": 65,
+      "contact_rate": 1.0,
+      "part_names": [
+        "mug_body",
+        "mug_handle"
+      ],
+      "part_attrs": [
+        [
+          "contain_sth",
+          "flow_out_sth",
+          "flow_in_sth",
+          "held_by_hand"
+        ],
+        [
+          "held_by_hand"
+        ]
+      ],
+      "contact_dist": [
+        0.8773,
+        0.1227
+      ],
+      "expected_parts": [
+        0
+      ],
+      "is_handover": false,
+      "has_semantic_ambiguity": false,
+      "intent_discriminative": true
+    },
+    "hold": {
+      "n_samples": 6651,
+      "n_with_contact": 6651,
+      "n_part_mismatch": 64,
+      "contact_rate": 1.0,
+      "part_names": [
+        "mug_body",
+        "mug_handle"
+      ],
+      "part_attrs": [
+        [
+          "contain_sth",
+          "flow_out_sth",
+          "flow_in_sth",
+          "held_by_hand"
+        ],
+        [
+          "held_by_hand"
+        ]
+      ],
+      "contact_dist": [
+        0.9568,
+        0.0432
+      ],
+      "expected_parts": [
+        0
+      ],
+      "is_handover": false,
+      "has_semantic_ambiguity": false,
+      "intent_discriminative": true
+    },
+    "handover": {
+      "n_samples": 3477,
+      "n_with_contact": 3477,
+      "n_part_mismatch": 34,
+      "contact_rate": 1.0,
+      "part_names": [
+        "mug_body",
+        "mug_handle"
+      ],
+      "part_attrs": [
+        [
+          "contain_sth",
+          "flow_out_sth",
+          "flow_in_sth",
+          "held_by_hand"
+        ],
+        [
+          "held_by_hand"
+        ]
+      ],
+      "contact_dist": [
+        0.6412,
+        0.3588
+      ],
+      "expected_parts": [
+        0,
+        1
+      ],
+      "is_handover": true,
+      "has_semantic_ambiguity": true,
+      "intent_discriminative": true
+    }
+  },
+  "marker": {
+    "handover": {
+      "n_samples": 186,
+      "n_with_contact": 186,
+      "n_part_mismatch": 0,
+      "contact_rate": 1.0,
+      "part_names": [
+        "pen_body",
+        "pen_cap"
+      ],
+      "part_attrs": [
+        [
+          "held_by_hand"
+        ],
+        [
+          "secure_sth",
+          "plugged/unplugged_by_hand"
+        ]
+      ],
+      "contact_dist": [
+        0.7018,
+        0.2982
+      ],
+      "expected_parts": [
+        0,
+        1
+      ],
+      "is_handover": true,
+      "has_semantic_ambiguity": true,
+      "intent_discriminative": true
+    },
+    "hold": {
+      "n_samples": 90,
+      "n_with_contact": 90,
+      "n_part_mismatch": 0,
+      "contact_rate": 1.0,
+      "part_names": [
+        "pen_body",
+        "pen_cap"
+      ],
+      "part_attrs": [
+        [
+          "held_by_hand"
+        ],
+        [
+          "secure_sth",
+          "plugged/unplugged_by_hand"
+        ]
+      ],
+      "contact_dist": [
+        0.8814,
+        0.1186
+      ],
+      "expected_parts": [
+        0
+      ],
+      "is_handover": false,
+      "has_semantic_ambiguity": false,
+      "intent_discriminative": true
+    },
+    "use": {
+      "n_samples": 85,
+      "n_with_contact": 85,
+      "n_part_mismatch": 0,
+      "contact_rate": 1.0,
+      "part_names": [
+        "pen_body",
+        "pen_cap"
+      ],
+      "part_attrs": [
+        [
+          "held_by_hand"
+        ],
+        [
+          "secure_sth",
+          "plugged/unplugged_by_hand"
+        ]
+      ],
+      "contact_dist": [
+        0.9005,
+        0.0995
+      ],
+      "expected_parts": [
+        0
+      ],
+      "is_handover": false,
+      "has_semantic_ambiguity": false,
+      "intent_discriminative": true
+    },
+    "liftup": {
+      "n_samples": 94,
+      "n_with_contact": 94,
+      "n_part_mismatch": 0,
+      "contact_rate": 1.0,
+      "part_names": [
+        "pen_body",
+        "pen_cap"
+      ],
+      "part_attrs": [
+        [
+          "held_by_hand"
+        ],
+        [
+          "secure_sth",
+          "plugged/unplugged_by_hand"
+        ]
+      ],
+      "contact_dist": [
+        0.3448,
+        0.6552
+      ],
+      "expected_parts": [
+        0,
+        1
+      ],
+      "is_handover": false,
+      "has_semantic_ambiguity": false,
+      "intent_discriminative": true
+    }
+  },
+  "pincer": {
+    "hold": {
+      "n_samples": 4,
+      "n_with_contact": 4,
+      "n_part_mismatch": 0,
+      "contact_rate": 1.0,
+      "part_names": [
+        "pincer_jaws",
+        "pincer_handle"
+      ],
+      "part_attrs": [
+        [
+          "clamp_sth"
+        ],
+        [
+          "held_by_hand"
+        ]
+      ],
+      "contact_dist": [
+        0.0526,
+        0.9474
+      ],
+      "expected_parts": [
+        1
+      ],
+      "is_handover": false,
+      "has_semantic_ambiguity": false,
+      "intent_discriminative": true
+    },
+    "handover": {
+      "n_samples": 10,
+      "n_with_contact": 10,
+      "n_part_mismatch": 0,
+      "contact_rate": 1.0,
+      "part_names": [
+        "pincer_jaws",
+        "pincer_handle"
+      ],
+      "part_attrs": [
+        [
+          "clamp_sth"
+        ],
+        [
+          "held_by_hand"
+        ]
+      ],
+      "contact_dist": [
+        0.4021,
+        0.5979
+      ],
+      "expected_parts": [
+        0,
+        1
+      ],
+      "is_handover": true,
+      "has_semantic_ambiguity": true,
+      "intent_discriminative": true
+    },
+    "use": {
+      "n_samples": 4,
+      "n_with_contact": 4,
+      "n_part_mismatch": 0,
+      "contact_rate": 1.0,
+      "part_names": [
+        "pincer_jaws",
+        "pincer_handle"
+      ],
+      "part_attrs": [
+        [
+          "clamp_sth"
+        ],
+        [
+          "held_by_hand"
+        ]
+      ],
+      "contact_dist": [
+        0.0,
+        1.0
+      ],
+      "expected_parts": [
+        1
+      ],
+      "is_handover": false,
+      "has_semantic_ambiguity": false,
+      "intent_discriminative": true
+    }
+  },
+  "power_drill": {
+    "liftup": {
+      "n_samples": 6,
+      "n_with_contact": 6,
+      "n_part_mismatch": 2,
+      "contact_rate": 1.0,
+      "part_names": [
+        "drill_chuck",
+        "drill_motor",
+        "drill_grip",
+        "drill_trigger",
+        "drill_battery"
+      ],
+      "part_attrs": [
+        [
+          "clamp_sth"
+        ],
+        [
+          "no_function"
+        ],
+        [
+          "held_by_hand"
+        ],
+        [
+          "trigger_sth",
+          "pressed/unpressed_by_hand"
+        ],
+        [
+          "no_function"
+        ]
+      ],
+      "contact_dist": [
+        0.0,
+        0.3422,
+        0.4851,
+        0.1072,
+        0.0656
+      ],
+      "expected_parts": [
+        1,
+        2,
+        3
+      ],
+      "is_handover": false,
+      "has_semantic_ambiguity": false,
+      "intent_discriminative": true
+    },
+    "handover": {
+      "n_samples": 17,
+      "n_with_contact": 17,
+      "n_part_mismatch": 3,
+      "contact_rate": 1.0,
+      "part_names": [
+        "drill_chuck",
+        "drill_motor",
+        "drill_grip",
+        "drill_trigger",
+        "drill_battery"
+      ],
+      "part_attrs": [
+        [
+          "clamp_sth"
+        ],
+        [
+          "no_function"
+        ],
+        [
+          "held_by_hand"
+        ],
+        [
+          "trigger_sth",
+          "pressed/unpressed_by_hand"
+        ],
+        [
+          "no_function"
+        ]
+      ],
+      "contact_dist": [
+        0.0182,
+        0.5507,
+        0.2702,
+        0.051,
+        0.1099
+      ],
+      "expected_parts": [
+        1,
+        2,
+        4
+      ],
+      "is_handover": true,
+      "has_semantic_ambiguity": true,
+      "intent_discriminative": true
+    },
+    "use": {
+      "n_samples": 8,
+      "n_with_contact": 8,
+      "n_part_mismatch": 0,
+      "contact_rate": 1.0,
+      "part_names": [
+        "drill_chuck",
+        "drill_motor",
+        "drill_grip",
+        "drill_trigger",
+        "drill_battery"
+      ],
+      "part_attrs": [
+        [
+          "clamp_sth"
+        ],
+        [
+          "no_function"
+        ],
+        [
+          "held_by_hand"
+        ],
+        [
+          "trigger_sth",
+          "pressed/unpressed_by_hand"
+        ],
+        [
+          "no_function"
+        ]
+      ],
+      "contact_dist": [
+        0.0,
+        0.0173,
+        0.6863,
+        0.0873,
+        0.2091
+      ],
+      "expected_parts": [
+        2,
+        4
+      ],
+      "is_handover": false,
+      "has_semantic_ambiguity": false,
+      "intent_discriminative": true
+    },
+    "hold": {
+      "n_samples": 4,
+      "n_with_contact": 4,
+      "n_part_mismatch": 0,
+      "contact_rate": 1.0,
+      "part_names": [
+        "drill_chuck",
+        "drill_motor",
+        "drill_grip",
+        "drill_trigger",
+        "drill_battery"
+      ],
+      "part_attrs": [
+        [
+          "clamp_sth"
+        ],
+        [
+          "no_function"
+        ],
+        [
+          "held_by_hand"
+        ],
+        [
+          "trigger_sth",
+          "pressed/unpressed_by_hand"
+        ],
+        [
+          "no_function"
+        ]
+      ],
+      "contact_dist": [
+        0.0098,
+        0.8547,
+        0.1355,
+        0.0,
+        0.0
+      ],
+      "expected_parts": [
+        1,
+        2
+      ],
+      "is_handover": false,
+      "has_semantic_ambiguity": false,
+      "intent_discriminative": true
+    }
+  },
+  "scissor": {
+    "handover": {
+      "n_samples": 4,
+      "n_with_contact": 4,
+      "n_part_mismatch": 0,
+      "contact_rate": 1.0,
+      "part_names": [
+        "scissor_blades",
+        "scissor_handle"
+      ],
+      "part_attrs": [
+        [
+          "shear_sth",
+          "cut_sth"
+        ],
+        [
+          "held_by_hand"
+        ]
+      ],
+      "contact_dist": [
+        0.5,
+        0.5
+      ],
+      "expected_parts": [
+        0,
+        1
+      ],
+      "is_handover": true,
+      "has_semantic_ambiguity": true,
+      "intent_discriminative": true
+    },
+    "hold": {
+      "n_samples": 2,
+      "n_with_contact": 2,
+      "n_part_mismatch": 0,
+      "contact_rate": 1.0,
+      "part_names": [
+        "scissor_blades",
+        "scissor_handle"
+      ],
+      "part_attrs": [
+        [
+          "shear_sth",
+          "cut_sth"
+        ],
+        [
+          "held_by_hand"
+        ]
+      ],
+      "contact_dist": [
+        0.0,
+        1.0
+      ],
+      "expected_parts": [
+        1
+      ],
+      "is_handover": false,
+      "has_semantic_ambiguity": false,
+      "intent_discriminative": true
+    },
+    "use": {
+      "n_samples": 2,
+      "n_with_contact": 2,
+      "n_part_mismatch": 0,
+      "contact_rate": 1.0,
+      "part_names": [
+        "scissor_blades",
+        "scissor_handle"
+      ],
+      "part_attrs": [
+        [
+          "shear_sth",
+          "cut_sth"
+        ],
+        [
+          "held_by_hand"
+        ]
+      ],
+      "contact_dist": [
+        0.0,
+        1.0
+      ],
+      "expected_parts": [
+        1
+      ],
+      "is_handover": false,
+      "has_semantic_ambiguity": false,
+      "intent_discriminative": true
+    }
+  },
+  "screwdriver": {
+    "use": {
+      "n_samples": 14,
+      "n_with_contact": 14,
+      "n_part_mismatch": 0,
+      "contact_rate": 1.0,
+      "part_names": [
+        "screwdriver_tip",
+        "screwdriver_handle"
+      ],
+      "part_attrs": [
+        [
+          "tighten_sth",
+          "loosen_sth"
+        ],
+        [
+          "held_by_hand"
+        ]
+      ],
+      "contact_dist": [
+        0.0,
+        1.0
+      ],
+      "expected_parts": [
+        1
+      ],
+      "is_handover": false,
+      "has_semantic_ambiguity": false,
+      "intent_discriminative": true
+    },
+    "handover": {
+      "n_samples": 25,
+      "n_with_contact": 25,
+      "n_part_mismatch": 0,
+      "contact_rate": 1.0,
+      "part_names": [
+        "screwdriver_tip",
+        "screwdriver_handle"
+      ],
+      "part_attrs": [
+        [
+          "tighten_sth",
+          "loosen_sth"
+        ],
+        [
+          "held_by_hand"
+        ]
+      ],
+      "contact_dist": [
+        0.4007,
+        0.5993
+      ],
+      "expected_parts": [
+        0,
+        1
+      ],
+      "is_handover": true,
+      "has_semantic_ambiguity": true,
+      "intent_discriminative": true
+    }
+  },
+  "squeeze_tube": {
+    "handover": {
+      "n_samples": 15,
+      "n_with_contact": 15,
+      "n_part_mismatch": 0,
+      "contact_rate": 1.0,
+      "part_names": [
+        "tube_body",
+        "tube_cap"
+      ],
+      "part_attrs": [
+        [
+          "contain_sth",
+          "flow_in_sth",
+          "flow_out_sth",
+          "held_by_hand",
+          "squeezed/unsqueezed_by_hand"
+        ],
+        [
+          "secure_sth",
+          "screwed/unscrewed_by_hand"
+        ]
+      ],
+      "contact_dist": [
+        0.9856,
+        0.0144
+      ],
+      "expected_parts": [
+        0
+      ],
+      "is_handover": true,
+      "has_semantic_ambiguity": true,
+      "intent_discriminative": false
+    },
+    "hold": {
+      "n_samples": 8,
+      "n_with_contact": 8,
+      "n_part_mismatch": 0,
+      "contact_rate": 1.0,
+      "part_names": [
+        "tube_body",
+        "tube_cap"
+      ],
+      "part_attrs": [
+        [
+          "contain_sth",
+          "flow_in_sth",
+          "flow_out_sth",
+          "held_by_hand",
+          "squeezed/unsqueezed_by_hand"
+        ],
+        [
+          "secure_sth",
+          "screwed/unscrewed_by_hand"
+        ]
+      ],
+      "contact_dist": [
+        0.8762,
+        0.1238
+      ],
+      "expected_parts": [
+        0
+      ],
+      "is_handover": false,
+      "has_semantic_ambiguity": false,
+      "intent_discriminative": false
+    },
+    "use": {
+      "n_samples": 8,
+      "n_with_contact": 8,
+      "n_part_mismatch": 0,
+      "contact_rate": 1.0,
+      "part_names": [
+        "tube_body",
+        "tube_cap"
+      ],
+      "part_attrs": [
+        [
+          "contain_sth",
+          "flow_in_sth",
+          "flow_out_sth",
+          "held_by_hand",
+          "squeezed/unsqueezed_by_hand"
+        ],
+        [
+          "secure_sth",
+          "screwed/unscrewed_by_hand"
+        ]
+      ],
+      "contact_dist": [
+        1.0,
+        0.0
+      ],
+      "expected_parts": [
+        0
+      ],
+      "is_handover": false,
+      "has_semantic_ambiguity": false,
+      "intent_discriminative": false
+    },
+    "liftup": {
+      "n_samples": 6,
+      "n_with_contact": 6,
+      "n_part_mismatch": 0,
+      "contact_rate": 1.0,
+      "part_names": [
+        "tube_body",
+        "tube_cap"
+      ],
+      "part_attrs": [
+        [
+          "contain_sth",
+          "flow_in_sth",
+          "flow_out_sth",
+          "held_by_hand",
+          "squeezed/unsqueezed_by_hand"
+        ],
+        [
+          "secure_sth",
+          "screwed/unscrewed_by_hand"
+        ]
+      ],
+      "contact_dist": [
+        1.0,
+        0.0
+      ],
+      "expected_parts": [
+        0
+      ],
+      "is_handover": false,
+      "has_semantic_ambiguity": false,
+      "intent_discriminative": false
+    }
+  },
+  "teapot": {
+    "handover": {
+      "n_samples": 45,
+      "n_with_contact": 45,
+      "n_part_mismatch": 0,
+      "contact_rate": 1.0,
+      "part_names": [
+        "teapot_body",
+        "teapot_spout",
+        "teapot_handle",
+        "teapot_lid"
+      ],
+      "part_attrs": [
+        [
+          "contain_sth",
+          "flow_in_sth",
+          "flow_out_sth",
+          "held_by_hand"
+        ],
+        [
+          "flow_out_sth"
+        ],
+        [
+          "held_by_hand"
+        ],
+        [
+          "cover_sth"
+        ]
+      ],
+      "contact_dist": [
+        0.2586,
+        0.3917,
+        0.3495,
+        0.0003
+      ],
+      "expected_parts": [
+        0,
+        1,
+        2
+      ],
+      "is_handover": true,
+      "has_semantic_ambiguity": true,
+      "intent_discriminative": true
+    },
+    "liftup": {
+      "n_samples": 35,
+      "n_with_contact": 35,
+      "n_part_mismatch": 0,
+      "contact_rate": 1.0,
+      "part_names": [
+        "teapot_body",
+        "teapot_spout",
+        "teapot_handle",
+        "teapot_lid"
+      ],
+      "part_attrs": [
+        [
+          "contain_sth",
+          "flow_in_sth",
+          "flow_out_sth",
+          "held_by_hand"
+        ],
+        [
+          "flow_out_sth"
+        ],
+        [
+          "held_by_hand"
+        ],
+        [
+          "cover_sth"
+        ]
+      ],
+      "contact_dist": [
+        0.0797,
+        0.0,
+        0.9203,
+        0.0
+      ],
+      "expected_parts": [
+        2
+      ],
+      "is_handover": false,
+      "has_semantic_ambiguity": false,
+      "intent_discriminative": true
+    },
+    "hold": {
+      "n_samples": 23,
+      "n_with_contact": 23,
+      "n_part_mismatch": 0,
+      "contact_rate": 1.0,
+      "part_names": [
+        "teapot_body",
+        "teapot_spout",
+        "teapot_handle",
+        "teapot_lid"
+      ],
+      "part_attrs": [
+        [
+          "contain_sth",
+          "flow_in_sth",
+          "flow_out_sth",
+          "held_by_hand"
+        ],
+        [
+          "flow_out_sth"
+        ],
+        [
+          "held_by_hand"
+        ],
+        [
+          "cover_sth"
+        ]
+      ],
+      "contact_dist": [
+        0.6583,
+        0.0261,
+        0.257,
+        0.0587
+      ],
+      "expected_parts": [
+        0,
+        2
+      ],
+      "is_handover": false,
+      "has_semantic_ambiguity": false,
+      "intent_discriminative": true
+    },
+    "use": {
+      "n_samples": 32,
+      "n_with_contact": 32,
+      "n_part_mismatch": 0,
+      "contact_rate": 1.0,
+      "part_names": [
+        "teapot_body",
+        "teapot_spout",
+        "teapot_handle",
+        "teapot_lid"
+      ],
+      "part_attrs": [
+        [
+          "contain_sth",
+          "flow_in_sth",
+          "flow_out_sth",
+          "held_by_hand"
+        ],
+        [
+          "flow_out_sth"
+        ],
+        [
+          "held_by_hand"
+        ],
+        [
+          "cover_sth"
+        ]
+      ],
+      "contact_dist": [
+        0.1148,
+        0.0,
+        0.8852,
+        0.0
+      ],
+      "expected_parts": [
+        2
+      ],
+      "is_handover": false,
+      "has_semantic_ambiguity": false,
+      "intent_discriminative": true
+    }
+  },
+  "toothbrush": {
+    "use": {
+      "n_samples": 27,
+      "n_with_contact": 27,
+      "n_part_mismatch": 0,
+      "contact_rate": 1.0,
+      "part_names": [
+        "brush_head",
+        "brush_handle"
+      ],
+      "part_attrs": [
+        [
+          "brush_sth"
+        ],
+        [
+          "held_by_hand"
+        ]
+      ],
+      "contact_dist": [
+        0.0,
+        1.0
+      ],
+      "expected_parts": [
+        1
+      ],
+      "is_handover": false,
+      "has_semantic_ambiguity": false,
+      "intent_discriminative": false
+    },
+    "handover": {
+      "n_samples": 16,
+      "n_with_contact": 16,
+      "n_part_mismatch": 0,
+      "contact_rate": 1.0,
+      "part_names": [
+        "brush_head",
+        "brush_handle"
+      ],
+      "part_attrs": [
+        [
+          "brush_sth"
+        ],
+        [
+          "held_by_hand"
+        ]
+      ],
+      "contact_dist": [
+        0.0003,
+        0.9997
+      ],
+      "expected_parts": [
+        1
+      ],
+      "is_handover": true,
+      "has_semantic_ambiguity": true,
+      "intent_discriminative": false
+    }
+  },
+  "trigger_sprayer": {
+    "liftup": {
+      "n_samples": 44,
+      "n_with_contact": 44,
+      "n_part_mismatch": 0,
+      "contact_rate": 1.0,
+      "part_names": [
+        "bottle_body",
+        "closure",
+        "nozzle",
+        "trigger"
+      ],
+      "part_attrs": [
+        [
+          "contain_sth",
+          "flow_in_sth",
+          "flow_out_sth",
+          "held_by_hand"
+        ],
+        [
+          "secure_sth",
+          "screwed/unscrewed_by_hand"
+        ],
+        [
+          "point_to_sth",
+          "spray_sth"
+        ],
+        [
+          "trigger_sth",
+          "pressed/unpressed_by_hand"
+        ]
+      ],
+      "contact_dist": [
+        0.7559,
+        0.2117,
+        0.0,
+        0.0324
+      ],
+      "expected_parts": [
+        0,
+        1
+      ],
+      "is_handover": false,
+      "has_semantic_ambiguity": false,
+      "intent_discriminative": true
+    },
+    "handover": {
+      "n_samples": 76,
+      "n_with_contact": 76,
+      "n_part_mismatch": 0,
+      "contact_rate": 1.0,
+      "part_names": [
+        "bottle_body",
+        "closure",
+        "nozzle",
+        "trigger"
+      ],
+      "part_attrs": [
+        [
+          "contain_sth",
+          "flow_in_sth",
+          "flow_out_sth",
+          "held_by_hand"
+        ],
+        [
+          "secure_sth",
+          "screwed/unscrewed_by_hand"
+        ],
+        [
+          "point_to_sth",
+          "spray_sth"
+        ],
+        [
+          "trigger_sth",
+          "pressed/unpressed_by_hand"
+        ]
+      ],
+      "contact_dist": [
+        0.8149,
+        0.1079,
+        0.002,
+        0.0752
+      ],
+      "expected_parts": [
+        0
+      ],
+      "is_handover": true,
+      "has_semantic_ambiguity": true,
+      "intent_discriminative": true
+    },
+    "hold": {
+      "n_samples": 104,
+      "n_with_contact": 104,
+      "n_part_mismatch": 0,
+      "contact_rate": 1.0,
+      "part_names": [
+        "bottle_body",
+        "closure",
+        "nozzle",
+        "trigger"
+      ],
+      "part_attrs": [
+        [
+          "contain_sth",
+          "flow_in_sth",
+          "flow_out_sth",
+          "held_by_hand"
+        ],
+        [
+          "secure_sth",
+          "screwed/unscrewed_by_hand"
+        ],
+        [
+          "point_to_sth",
+          "spray_sth"
+        ],
+        [
+          "trigger_sth",
+          "pressed/unpressed_by_hand"
+        ]
+      ],
+      "contact_dist": [
+        0.9663,
+        0.0141,
+        0.0,
+        0.0196
+      ],
+      "expected_parts": [
+        0
+      ],
+      "is_handover": false,
+      "has_semantic_ambiguity": false,
+      "intent_discriminative": true
+    },
+    "use": {
+      "n_samples": 81,
+      "n_with_contact": 81,
+      "n_part_mismatch": 0,
+      "contact_rate": 1.0,
+      "part_names": [
+        "bottle_body",
+        "closure",
+        "nozzle",
+        "trigger"
+      ],
+      "part_attrs": [
+        [
+          "contain_sth",
+          "flow_in_sth",
+          "flow_out_sth",
+          "held_by_hand"
+        ],
+        [
+          "secure_sth",
+          "screwed/unscrewed_by_hand"
+        ],
+        [
+          "point_to_sth",
+          "spray_sth"
+        ],
+        [
+          "trigger_sth",
+          "pressed/unpressed_by_hand"
+        ]
+      ],
+      "contact_dist": [
+        0.7067,
+        0.1195,
+        0.0002,
+        0.1736
+      ],
+      "expected_parts": [
+        0,
+        3
+      ],
+      "is_handover": false,
+      "has_semantic_ambiguity": false,
+      "intent_discriminative": true
+    }
+  },
+  "wineglass": {
+    "use": {
+      "n_samples": 32,
+      "n_with_contact": 32,
+      "n_part_mismatch": 0,
+      "contact_rate": 1.0,
+      "part_names": [
+        "wineglass_bowl",
+        "wineglass_stem",
+        "wineglass_base"
+      ],
+      "part_attrs": [
+        [
+          "contain_sth",
+          "flow_in_sth",
+          "flow_out_sth",
+          "held_by_hand"
+        ],
+        [
+          "held_by_hand"
+        ],
+        [
+          "no_function"
+        ]
+      ],
+      "contact_dist": [
+        0.1487,
+        0.5646,
+        0.2867
+      ],
+      "expected_parts": [
+        1,
+        2
+      ],
+      "is_handover": false,
+      "has_semantic_ambiguity": false,
+      "intent_discriminative": true
+    },
+    "handover": {
+      "n_samples": 68,
+      "n_with_contact": 68,
+      "n_part_mismatch": 0,
+      "contact_rate": 1.0,
+      "part_names": [
+        "wineglass_bowl",
+        "wineglass_stem",
+        "wineglass_base"
+      ],
+      "part_attrs": [
+        [
+          "contain_sth",
+          "flow_in_sth",
+          "flow_out_sth",
+          "held_by_hand"
+        ],
+        [
+          "held_by_hand"
+        ],
+        [
+          "no_function"
+        ]
+      ],
+      "contact_dist": [
+        0.5299,
+        0.2562,
+        0.2139
+      ],
+      "expected_parts": [
+        0,
+        1,
+        2
+      ],
+      "is_handover": true,
+      "has_semantic_ambiguity": true,
+      "intent_discriminative": true
+    },
+    "hold": {
+      "n_samples": 23,
+      "n_with_contact": 23,
+      "n_part_mismatch": 0,
+      "contact_rate": 1.0,
+      "part_names": [
+        "wineglass_bowl",
+        "wineglass_stem",
+        "wineglass_base"
+      ],
+      "part_attrs": [
+        [
+          "contain_sth",
+          "flow_in_sth",
+          "flow_out_sth",
+          "held_by_hand"
+        ],
+        [
+          "held_by_hand"
+        ],
+        [
+          "no_function"
+        ]
+      ],
+      "contact_dist": [
+        0.9967,
+        0.0033,
+        0.0
+      ],
+      "expected_parts": [
+        0
+      ],
+      "is_handover": false,
+      "has_semantic_ambiguity": false,
+      "intent_discriminative": true
+    },
+    "liftup": {
+      "n_samples": 22,
+      "n_with_contact": 22,
+      "n_part_mismatch": 0,
+      "contact_rate": 1.0,
+      "part_names": [
+        "wineglass_bowl",
+        "wineglass_stem",
+        "wineglass_base"
+      ],
+      "part_attrs": [
+        [
+          "contain_sth",
+          "flow_in_sth",
+          "flow_out_sth",
+          "held_by_hand"
+        ],
+        [
+          "held_by_hand"
+        ],
+        [
+          "no_function"
+        ]
+      ],
+      "contact_dist": [
+        0.5821,
+        0.3769,
+        0.041
+      ],
+      "expected_parts": [
+        0,
+        1
+      ],
+      "is_handover": false,
+      "has_semantic_ambiguity": false,
+      "intent_discriminative": true
+    }
+  },
+  "wrench": {
+    "handover": {
+      "n_samples": 3,
+      "n_with_contact": 3,
+      "n_part_mismatch": 0,
+      "contact_rate": 1.0,
+      "part_names": [
+        "wrench_head",
+        "wrench_handle"
+      ],
+      "part_attrs": [
+        [
+          "tighten_sth",
+          "loosen_sth"
+        ],
+        [
+          "held_by_hand"
+        ]
+      ],
+      "contact_dist": [
+        0.3462,
+        0.6538
+      ],
+      "expected_parts": [
+        0,
+        1
+      ],
+      "is_handover": true,
+      "has_semantic_ambiguity": true,
+      "intent_discriminative": true
+    },
+    "use": {
+      "n_samples": 1,
+      "n_with_contact": 1,
+      "n_part_mismatch": 0,
+      "contact_rate": 1.0,
+      "part_names": [
+        "wrench_head",
+        "wrench_handle"
+      ],
+      "part_attrs": [
+        [
+          "tighten_sth",
+          "loosen_sth"
+        ],
+        [
+          "held_by_hand"
+        ]
+      ],
+      "contact_dist": [
+        0.0,
+        1.0
+      ],
+      "expected_parts": [
+        1
+      ],
+      "is_handover": false,
+      "has_semantic_ambiguity": false,
+      "intent_discriminative": true
+    }
+  }
+}
